@@ -1,0 +1,238 @@
+﻿#bg-video {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    object-fit: cover;
+    z-index: -2;
+    animation: introBlur 1.2s ease-out forwards;
+}
+/* Overlay oscuro encima del video */
+
+.overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0,0,0,0.5);
+    z-index: -1;
+}
+
+/* Fondo visual con degradado overlay */
+
+
+
+body {
+    background: url('img/fondo-legal.jpg') no-repeat center center fixed;
+    background-size: cover;
+    font-family: 'Segoe UI', sans-serif;
+    height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin: 0;
+    overflow: hidden;
+    position: relative;
+    font-family: 'Inter', sans-serif; /* O 'Poppins' */
+}
+
+    /* Overlay para oscurecer suavemente */
+    body::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.4); /* Oscurecer la imagen */
+        z-index: 0;
+    }
+
+/*  Card glass effect */
+.login-container {
+    z-index: 1;
+    animation: fadeInScale 0.6s ease-out;
+}
+
+.login-card {
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 20px;
+    padding: 3rem;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+    max-width: 400px;
+    width: 100%;
+    color: #fff;
+    animation: fadeSlideIn 0.8s ease-out;
+}
+
+/*  Título con ícono */
+.login-title {
+    font-weight: 700;
+    font-size: 1.6rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 1rem;
+    color: #fff;
+}
+
+    .login-title img {
+        width: 32px;
+        margin-right: 10px;
+    }
+
+/* Inputs visuales */
+input.form-control {
+    transition: all 0.3s ease;
+    background-color: #f8f9fa;
+    border: 1px solid #ced4da;
+    border-radius: 0.375rem;
+    padding: 0.75rem;
+}
+
+    input.form-control:focus {
+        background-color: #fff;
+        border-color: #4a90e2;
+        box-shadow: 0 0 0 4px rgba(74, 144, 226, 0.25);
+        outline: none;
+    }
+
+/* Botón animado */
+button.btn {
+    transition: all 0.3s ease;
+    font-weight: 600;
+    border: none;
+    border-radius: 0.375rem;
+    box-shadow: 0 4px 14px rgba(0, 123, 255, 0.4);
+}
+
+    button.btn:hover {
+        background-color: #0056d2;
+        transform: scale(1.03);
+        box-shadow: 0 6px 20px rgba(0, 123, 255, 0.5);
+    }
+
+/* Animación de entrada */
+@keyframes fadeSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(30px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Firma personal */
+.firma-dj {
+    text-align: center;
+    font-size: 0.85rem;
+    color: #eee;
+    margin-top: 1rem;
+    opacity: 0.8;
+}
+.icono-logo {
+    width: 32px;
+    height: 32px;
+    margin-right: 12px;
+    filter: drop-shadow(0 0 5px rgba(0, 136, 255, 0.5));
+    animation: pulseLogo 2s infinite ease-in-out;
+}
+
+@keyframes pulseLogo {
+    0% {
+        transform: scale(1);
+        opacity: 1;
+    }
+
+    50% {
+        transform: scale(1.08);
+        opacity: 0.8;
+    }
+
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+.titulo-con-glow {
+    font-weight: 700;
+    font-size: 1.6rem;
+    text-shadow: 0 0 10px rgba(255, 255, 255, 0.6);
+    letter-spacing: 0.5px;
+}
+@keyframes introBlur {
+    0% {
+        filter: blur(12px) brightness(0.8);
+        transform: scale(1.05);
+    }
+
+    100% {
+        filter: blur(0px) brightness(1);
+        transform: scale(1);
+    }
+}
+
+@keyframes fadeInError {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+/* Animación de temblor */
+@keyframes shakeFade {
+    0% {
+        transform: translateX(0);
+        opacity: 0.2;
+    }
+
+    20% {
+        transform: translateX(-8px);
+        opacity: 1;
+    }
+
+    40% {
+        transform: translateX(8px);
+    }
+
+    60% {
+        transform: translateX(-6px);
+    }
+
+    80% {
+        transform: translateX(6px);
+    }
+
+    100% {
+        transform: translateX(0);
+    }
+}
+
+/* Estilo para el mensaje de error */
+#mensajeError {
+    animation: fadeInError 0.4s ease;
+    transition: all 0.3s ease;
+}
+
+/* Clase que aplica el shake */
+.shake {
+    animation: shakeFade 0.5s ease-in-out;
+}
+
+#pantallaCarga {
+    opacity: 0;
+    transition: opacity 0.5s ease-in-out;
+}
+
+    #pantallaCarga.visible {
+        opacity: 1;
+        z-index: 9999;
+    }

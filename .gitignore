@@ -1,0 +1,101 @@
+# -------------------------------
+# VISUAL STUDIO / .NET BUILD
+# -------------------------------
+
+.vs/
+*.user
+*.suo
+*.sln.docstates
+*.vsidx
+
+bin/
+obj/
+out/
+TestResults/
+Generated_Code/
+
+# -------------------------------
+# NUGET / PAQUETES / NODE
+# -------------------------------
+
+*.nupkg
+*.snupkg
+packages/
+node_modules/
+package-lock.json
+
+# -------------------------------
+# LOGS / BDs / TEMPORALES
+# -------------------------------
+
+*.log
+*.vsidx
+*.db
+*.sqlite
+*.bak
+*.tmp
+
+# -------------------------------
+# CONFIG SENSIBLE
+# -------------------------------
+
+appsettings.json
+appsettings.Development.json
+appsettings.Local.json
+appsettings.Production.json
+appsettings.*.json
+.env
+*.secret.json
+# Permitir template versionable
+!appsettings.Example.json
+!appsettings.Template.json
+
+# -------------------------------
+# DOCKER
+# -------------------------------
+
+**/docker-compose*.yml
+
+# -------------------------------
+# GIT / IDE / OTROS
+# -------------------------------
+
+*.orig
+*.rej
+*.swn
+*.swp
+.idea/
+.vscode/
+
+# -------------------------------
+# WINDOWS / OTROS
+# -------------------------------
+
+Thumbs.db
+desktop.ini
+ehthumbs.db
+.DS_Store
+
+# -------------------------------
+# ARCHIVOS EXTRAS PARA FRONTEND
+# -------------------------------
+
+wwwroot/lib/
+
+# -------------------------------
+# VISUAL STUDIO / .NET BUILD
+# -------------------------------
+publish/
+
+## Build outputs
+bin/
+obj/
+out/
+TestResults/
+Generated_Code/
+
+# permitir templates
+!appsettings.Example.json
+!appsettings.Example.Development.json
+!appsettings.Template.json
+Properties/serviceDependencies.local.json
