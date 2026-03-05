@@ -357,8 +357,15 @@ app.Use(async (context, next) =>
     context.Response.Headers.TryAdd("Referrer-Policy", "no-referrer");
     await next();
 });
-app.UseDefaultFiles();
+// ✅ Servir login.html como default en /
+var defaultFilesOptions = new DefaultFilesOptions();
+defaultFilesOptions.DefaultFileNames.Clear();
+defaultFilesOptions.DefaultFileNames.Add("login.html");
+app.UseDefaultFiles(defaultFilesOptions);
+
+// ✅ Servir archivos de wwwroot (css, js, img, videos, etc.)
 app.UseStaticFiles();
+
 app.UseRouting();
 app.UseCors("PermitirFrontend"); // ESTO ACTIVA CORS
 app.UseRateLimiter(); //aquí (antes de tu ErrorHandlerMiddleware)
