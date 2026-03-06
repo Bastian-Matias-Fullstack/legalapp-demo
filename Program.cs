@@ -61,16 +61,13 @@ builder.Services.AddControllers()
     {
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
     });
-
 builder.Services.AddFluentValidationAutoValidation()
                 .AddFluentValidationClientsideAdapters();
-
 builder.Services.AddValidatorsFromAssemblyContaining<CrearCasoRequestValidator>();
 builder.Services.AddTransient(
     typeof(IPipelineBehavior<,>),
     typeof(ValidationBehavior<,>)
 );
-
 builder.Services.Configure<ApiBehaviorOptions>(options =>
 {
     options.InvalidModelStateResponseFactory = context =>
@@ -87,7 +84,6 @@ builder.Services.Configure<ApiBehaviorOptions>(options =>
                 ).ToList()
             })
             .ToList();
-
         var problemDetails = new ProblemDetails
         {
             Title = "Solicitud inválida",
@@ -95,14 +91,10 @@ builder.Services.Configure<ApiBehaviorOptions>(options =>
             Detail = "Uno o más parámetros no cumplen el formato esperado.",
             Instance = context.HttpContext.Request.Path
         };
-
         problemDetails.Extensions["errors"] = errors;
-
         return new BadRequestObjectResult(problemDetails);
     };
 });
-
-
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
@@ -115,7 +107,6 @@ builder.Services.AddSwaggerGen(c =>
         Version = "v1",
         Description = "Documentación oficial de la API"
     });
-
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Name = "Authorization",
@@ -125,7 +116,6 @@ builder.Services.AddSwaggerGen(c =>
         In = ParameterLocation.Header,
         Description = "Ejemplo: Bearer {tu_token}"
     });
-
     c.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
         {
@@ -142,7 +132,6 @@ builder.Services.AddSwaggerGen(c =>
     });
     c.UseInlineDefinitionsForEnums(); //Esto activa los enums como dropdown en Swagger
 });
-// 1. CORS
 // 1) CORS (por configuración)
 var corsOrigins = builder.Configuration
     .GetSection("Cors:Origins")
@@ -201,14 +190,13 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
     options.KnownNetworks.Clear();
     options.KnownProxies.Clear();
 });
-// ✅ Rate Limiting (estricto pero usable para demo pública)
+//   Rate Limiting (estricto pero usable para demo pública)
 // - Global API: 20 req/min por IP
 // - Login: 3 req/min por IP
 // - Writes (POST/PUT/DELETE): 8 req/min por IP
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-
     options.OnRejected = async (context, token) =>
     {
         // Retry-After si está disponible
@@ -217,7 +205,6 @@ builder.Services.AddRateLimiter(options =>
             context.HttpContext.Response.Headers.RetryAfter =
                 ((int)retryAfter.TotalSeconds).ToString();
         }
-
         context.HttpContext.Response.ContentType = "application/json";
         await context.HttpContext.Response.WriteAsync(
             "{\"message\":\"Demasiadas solicitudes. Intenta nuevamente en unos segundos.\"}",
@@ -279,9 +266,27 @@ builder.Services.AddHsts(options =>
     // en el dominio real también funcionará.
     options.ExcludedHosts.Clear();
 });
-
 var app = builder.Build();
+
 app.UseForwardedHeaders();
+app.Use(async (context, next) =>
+{
+    const string headerName = "X-Correlation-ID";
+    var correlationId = context.Request.Headers.TryGetValue(headerName, out var incomingCorrelationId)
+        && !string.IsNullOrWhiteSpace(incomingCorrelationId)
+        ? incomingCorrelationId.ToString()
+        : Guid.NewGuid().ToString("N");
+    context.Items[headerName] = correlationId;
+    context.Response.Headers[headerName] = correlationId;
+
+    using (app.Logger.BeginScope(new Dictionary<string, object>
+    {
+        ["CorrelationId"] = correlationId
+    }))
+    {
+        await next();
+    }
+});
 // Swagger controlado por configuración
 var swaggerEnabled = builder.Configuration.GetValue<bool>("Swagger:Enabled");
 if (swaggerEnabled)
@@ -298,7 +303,6 @@ if (swaggerEnabled)
         app.Use(async (context, next) =>
         {
             var path = context.Request.Path;
-
             var isSwagger =
                 path.StartsWithSegments("/swagger", StringComparison.OrdinalIgnoreCase);
             if (!isSwagger)

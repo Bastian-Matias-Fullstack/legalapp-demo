@@ -31,7 +31,6 @@ public class AuthController : ControllerBase
         const string credencialesInvalidas = "Credenciales inválidas";
 
         var email = (dto.Email ?? string.Empty).Trim().ToLowerInvariant();
-
         // Información del cliente para auditoría de seguridad
         var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
         var userAgent = Request.Headers["User-Agent"].ToString();
@@ -43,7 +42,6 @@ public class AuthController : ControllerBase
                 lockedUntilUtc = lockedUntil
             });
         }
-
         /* aqui usamos EF CORE YA QUE ES CONSULTA SIMPLE */
         var usuario = await _context.Usuarios
            .Include(u => u.UsuarioRoles)
@@ -66,8 +64,6 @@ public class AuthController : ControllerBase
             }
             return Unauthorized(credencialesInvalidas);
         }
-
-
 
         // Verificar contraseña con IHashService
         var esValida = _hashService.Verificar(dto.Password, usuario.PasswordHash);
