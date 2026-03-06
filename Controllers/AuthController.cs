@@ -36,6 +36,9 @@ public class AuthController : ControllerBase
         var userAgent = Request.Headers["User-Agent"].ToString();
         if (_lockoutService.IsLocked(email, out var lockedUntil))
         {
+            _logger.LogWarning(
+                "LOGIN_LOCKED email={Email} ip={IP} userAgent={UserAgent} lockedUntilUtc={LockedUntilUtc}",
+                email, ip, userAgent, lockedUntil);
             return StatusCode(StatusCodes.Status429TooManyRequests, new
             {
                 message = "Cuenta temporalmente bloqueada por múltiples intentos fallidos.",
@@ -64,7 +67,6 @@ public class AuthController : ControllerBase
             }
             return Unauthorized(credencialesInvalidas);
         }
-
         // Verificar contraseña con IHashService
         var esValida = _hashService.Verificar(dto.Password, usuario.PasswordHash);
         if (!esValida)
