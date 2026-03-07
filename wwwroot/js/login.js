@@ -87,9 +87,9 @@ document.getElementById("loginForm").addEventListener("submit", async function (
         const ctx = sessionStorage.getItem("demoContext");
 
         let hash = "";
-        if (ctx === "casos") hash = "#casos";
-        else if (ctx === "roles") hash = "#roles";
-        else if (ctx === "usuarios") hash = "#usuarios";
+        if (ctx === "casos") hash = "#mod-casos";
+        else if (ctx === "roles") hash = "#mod-roles";
+        else if (ctx === "usuarios") hash = "#mod-usuarios";
 
         // Limpieza opcional para no reutilizarlo en el siguiente login
         sessionStorage.removeItem("demoContext");

@@ -195,12 +195,14 @@ document.addEventListener("DOMContentLoaded", () => {
     } else if (roles.includes("Soporte")) {
         moduloInicial = "mod-usuarios";
     }
+
     const hashModulo = (window.location.hash || "").replace("#", "").trim();
     const modulosPermitidos = ["mod-casos", "mod-roles", "mod-usuarios"];
 
     if (modulosPermitidos.includes(hashModulo)) {
         moduloInicial = hashModulo;
     }
+
     navigate(moduloInicial);
 
     const apiUrl = "api/Casos";
