@@ -23,7 +23,6 @@ public class AuthController : ControllerBase
         _logger = logger;
         _lockoutService = lockoutService;
     }
-
     [AllowAnonymous]
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] LoginDto dto)

@@ -346,29 +346,49 @@ if (app.Environment.IsProduction())
     app.UseHsts();              
     app.UseHttpsRedirection();
 }
+
 app.Use(async (context, next) =>
 {
+    context.Response.Headers.TryAdd("X-Content-Type-Options", "nosniff");
+    context.Response.Headers.TryAdd("Referrer-Policy", "no-referrer");
+    context.Response.Headers.TryAdd("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+    context.Response.Headers.TryAdd("Cross-Origin-Opener-Policy", "same-origin");
+    context.Response.Headers.TryAdd("Cross-Origin-Resource-Policy", "same-origin");
+
     if (app.Environment.IsProduction() &&
         builder.Configuration.GetValue<bool>("SecurityHeaders:EnableCsp"))
     {
-        var ancestors = builder.Configuration
+        var frameAncestors = builder.Configuration
             .GetSection("SecurityHeaders:FrameAncestors")
             .Get<string[]>() ?? new[] { "'self'" };
-        var frameAncestors = string.Join(" ", ancestors);
-        context.Response.Headers["Content-Security-Policy"] =
-            $"frame-ancestors {frameAncestors};";
+
+        var frameAncestorsValue = string.Join(" ", frameAncestors);
+
+        var csp = string.Join(" ",
+            "default-src 'self';",
+            "base-uri 'self';",
+            "object-src 'none';",
+            "frame-ancestors " + frameAncestorsValue + ";",
+            "img-src 'self' data: https:;",
+            "font-src 'self' https: data:;",
+            "style-src 'self' 'unsafe-inline' https:;",
+            "script-src 'self' 'unsafe-inline' https:;",
+            "connect-src 'self' https:;",
+            "form-action 'self';"
+        );
+
+        context.Response.Headers["Content-Security-Policy"] = csp;
     }
-    context.Response.Headers.TryAdd("X-Content-Type-Options", "nosniff");
-    context.Response.Headers.TryAdd("Referrer-Policy", "no-referrer");
+
     await next();
 });
-// ✅ Servir login.html como default en /
+//  Servir login.html como default en /
 var defaultFilesOptions = new DefaultFilesOptions();
 defaultFilesOptions.DefaultFileNames.Clear();
 defaultFilesOptions.DefaultFileNames.Add("login.html");
 app.UseDefaultFiles(defaultFilesOptions);
 
-// ✅ Servir archivos de wwwroot (css, js, img, videos, etc.)
+//  Servir archivos de wwwroot (css, js, img, videos, etc.)
 app.UseStaticFiles();
 
 app.UseRouting();
