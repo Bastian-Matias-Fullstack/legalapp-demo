@@ -361,7 +361,6 @@ app.Use(async (context, next) =>
         var frameAncestors = builder.Configuration
             .GetSection("SecurityHeaders:FrameAncestors")
             .Get<string[]>() ?? new[] { "'self'", "http://localhost:4200" };
-
         var frameAncestorsValue = string.Join(" ", frameAncestors);
 
         var csp = string.Join(" ",
