@@ -65,23 +65,36 @@ document.getElementById("loginForm").addEventListener("submit", async function (
             throw new Error("Login failed: " + response.status);
         }
 
-      /*  const data = await response.json();*/
         const data = await response.json();
+        if (!data.token) {
+            mostrarError("No fue posible iniciar sesión.");
+            return;
+        }
         const token = data.token;
-        localStorage.setItem("jwt_token", token);
-       
+
         // Decodificar manualmente
         const payloadBase64 = token.split('.')[1];
         const payloadJson = atob(payloadBase64);
         const payload = JSON.parse(payloadJson);
 
+        const rawRoles = payload["http://schemas.microsoft.com/ws/2008/06/identity/claims/role"];
+        const roles = Array.isArray(rawRoles) ? rawRoles : (rawRoles ? [rawRoles] : []);
+
+        if (roles.length === 0) {
+            localStorage.removeItem("jwt_token");
+            localStorage.removeItem("usuario_actual");
+
+            mostrarError("Tu cuenta no tiene un rol asignado. No es posible ingresar a esta demo.");
+            return;
+        }
 
         const usuario = {
             email: payload["http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress"] || "",
             nombre: payload["http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name"] || "Usuario",
-            rol: payload["http://schemas.microsoft.com/ws/2008/06/identity/claims/role"] || []
+            roles: roles
         };
 
+        localStorage.setItem("jwt_token", token);
         localStorage.setItem("usuario_actual", JSON.stringify(usuario));
         // 🔹 Leer el contexto demo que ya guardaste arriba (casos|roles|usuarios)
         const ctx = sessionStorage.getItem("demoContext");

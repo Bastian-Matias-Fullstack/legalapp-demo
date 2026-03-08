@@ -24,8 +24,8 @@ function CanAccess(moduloId, roles) {
     // Admin lo ve todo
     if (roles.includes("Admin")) return true;
 
-    // Dashboard: todos los autenticados lo ven
-    if (moduloId === "mod-dashboard") return true;
+    // Dashboard solo Admin
+    if (moduloId === "mod-dashboard") return roles.includes("Admin");
 
     // Accesos por módulo (unión OR)
     const canCasos = roles.includes("Abogado");
@@ -49,7 +49,7 @@ function obtenerRolesDesdeJWT() {
             const payloadJson = atob(payloadBase64);
             const payload = JSON.parse(payloadJson);
             const roles = payload["http://schemas.microsoft.com/ws/2008/06/identity/claims/role"];
-            return Array.isArray(roles) ? roles : [roles];
+          return Array.isArray(roles) ? roles.filter(Boolean) : (roles ? [roles] : []);
         } catch (e) {
             console.error("Error al decodificar el token:", e);
             return [];
@@ -60,7 +60,72 @@ function obtenerRolesDesdeJWT() {
         if (roles.includes("Abogado")) return "Abogado";
         if (roles.includes("Soporte")) return "Soporte";
         return null;
+}
+function normalizarRoles(roles) {
+    if (!Array.isArray(roles)) return [];
+    return roles.filter(Boolean);
+}
+
+function tieneRolValido(roles) {
+    roles = normalizarRoles(roles);
+    return roles.includes("Admin") || roles.includes("Abogado") || roles.includes("Soporte");
+}
+
+function obtenerModuloDefaultPorRol(roles) {
+    roles = normalizarRoles(roles);
+
+    if (roles.includes("Admin")) return "mod-dashboard";
+    if (roles.includes("Abogado")) return "mod-casos";
+    if (roles.includes("Soporte")) return "mod-usuarios";
+
+    return null;
+}
+
+function resolverModuloInicial(roles, moduloSolicitado) {
+    roles = normalizarRoles(roles);
+
+    if (!tieneRolValido(roles)) {
+        return {
+            allowed: false,
+            reason: "no-role",
+            target: null
+        };
     }
+
+    const modulosValidos = ["mod-dashboard", "mod-casos", "mod-roles", "mod-usuarios"];
+
+    if (moduloSolicitado && modulosValidos.includes(moduloSolicitado) && CanAccess(moduloSolicitado, roles)) {
+        return {
+            allowed: true,
+            reason: "requested-allowed",
+            target: moduloSolicitado
+        };
+    }
+
+    const fallback = obtenerModuloDefaultPorRol(roles);
+
+    if (!fallback) {
+        return {
+            allowed: false,
+            reason: "no-available-module",
+            target: null
+        };
+    }
+
+    if (moduloSolicitado && modulosValidos.includes(moduloSolicitado) && !CanAccess(moduloSolicitado, roles)) {
+        return {
+            allowed: true,
+            reason: "requested-denied-fallback",
+            target: fallback
+        };
+    }
+
+    return {
+        allowed: true,
+        reason: "default",
+        target: fallback
+    };
+}
         function aplicarVisibilidadPorRol(roles) {
             roles = Array.isArray(roles) ? roles : [];
 
@@ -182,28 +247,51 @@ document.addEventListener("DOMContentLoaded", () => {
         window.location.href = "login.html";
         return;
     }
-    const roles = obtenerRolesDesdeJWT();
+    const roles = normalizarRoles(obtenerRolesDesdeJWT());
+
+    if (!tieneRolValido(roles)) {
+        localStorage.removeItem("jwt_token");
+        localStorage.removeItem("usuario_actual");
+        sessionStorage.removeItem("demoContext");
+        window.location.hash = "";
+
+        Swal?.fire?.({
+            icon: "warning",
+            title: "Acceso no disponible",
+            text: "Tu cuenta no tiene un rol asignado. No es posible ingresar a esta demo."
+        }).then(() => {
+            window.location.href = "login.html";
+        });
+
+        return;
+    }
+
     configurarSidebarPorRoles(roles);
     aplicarVisibilidadPorRol(roles);
-    // 4️⃣ Cargar módulo inicial (solo UX)
-    let moduloInicial = "mod-dashboard";
-
-    if (roles.includes("Admin")) {
-        moduloInicial = "mod-dashboard";
-    } else if (roles.includes("Abogado")) {
-        moduloInicial = "mod-casos";
-    } else if (roles.includes("Soporte")) {
-        moduloInicial = "mod-usuarios";
-    }
 
     const hashModulo = (window.location.hash || "").replace("#", "").trim();
-    const modulosPermitidos = ["mod-casos", "mod-roles", "mod-usuarios"];
+    const moduloSolicitado = hashModulo || null;
 
-    if (modulosPermitidos.includes(hashModulo)) {
-        moduloInicial = hashModulo;
+    const decision = resolverModuloInicial(roles, moduloSolicitado);
+
+    if (!decision.allowed || !decision.target) {
+        localStorage.removeItem("jwt_token");
+        localStorage.removeItem("usuario_actual");
+        sessionStorage.removeItem("demoContext");
+        window.location.href = "login.html";
+        window.location.hash = "";
+        return;
     }
 
-    navigate(moduloInicial);
+    if (decision.reason === "requested-denied-fallback") {
+        Swal?.fire?.({
+            icon: "info",
+            title: "Redirección segura",
+            text: "Tu rol no tiene acceso al módulo solicitado. Te redirigimos a tu módulo disponible."
+        });
+    }
+
+    navigate(decision.target);
 
     const apiUrl = "api/Casos";
     /*➡️ Define la URL base para la API de casos.
@@ -222,9 +310,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // 1️⃣ Siempre aplicar reglas de rol (base de la app)
     // 2️⃣ Solo si existe demoContext, se aplica encima (modo demo)
-    if (demoContext) {
-        applyDemoContextVisibility(demoContext);
-    }
+
     // Aplicamos Choise.Js
     const filtroEstado = document.getElementById("filtroEstado");
     const choicesEstado = new Choices(filtroEstado, {
@@ -548,7 +634,8 @@ function validateCasoForm() {
     document.getElementById("logoutBtn")?.addEventListener("click", () => {
         localStorage.removeItem("jwt_token");
         localStorage.removeItem("usuario_actual");
-        sessionStorage.removeItem("demoContext"); 
+        sessionStorage.removeItem("demoContext");
+        window.location.hash = "";
         window.location.href = "login.html";
     });
 
