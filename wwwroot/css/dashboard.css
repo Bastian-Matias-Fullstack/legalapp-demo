@@ -4,6 +4,16 @@
 ========================= */
 /*video de FONDO 
 */
+
+/*validacion sin autenticacion*/
+.auth-pending {
+    visibility: hidden;
+}
+
+.auth-ready {
+    visibility: visible;
+}
+
 #bg-video-dashboard {
     position: fixed;
     top: 0;

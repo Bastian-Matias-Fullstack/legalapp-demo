@@ -4,6 +4,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard de Casos Legales</title>
+    <style>
+        body.auth-pending {
+            visibility: hidden;
+        }
+
+        body.auth-ready {
+            visibility: visible;
+        }
+    </style>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css" />
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
@@ -12,8 +21,9 @@
 
     <!-- FontAwesome -->
     <link rel="stylesheet" href="/css/dashboard.css">
+
 </head>
-<body>
+<body class="auth-pending">
     <!-- 🎥 Video de fondo -->
     <video autoplay muted loop playsinline id="bg-video-dashboard">
         <source src="/videos/istockphoto-2154975024-640_adpp_is.mp4" type="video/webm">
@@ -37,7 +47,7 @@
         <button class="sidebar-toggle" onclick="toggleSidebar()">☰</button>
 
         <ul class="sidebar-menu">
-        
+
 
             <li id="nav-casos" onclick="navigate('mod-casos')">
                 <i class="bi bi-folder2-open"></i>
@@ -207,7 +217,7 @@
                         <input type="hidden" id="form-id" />
 
                         <div class="mb-3">
-                            <label for="form-titulo" class="form-label text-uppercase small">Título</label>                            
+                            <label for="form-titulo" class="form-label text-uppercase small">Título</label>
                             <input type="text" id="form-titulo" class="form-control input-glass" required />
                             <div class="invalid-feedback"></div>
                         </div>
@@ -220,7 +230,7 @@
                         </div>
 
                         <div class="mb-3">
-                            <label for="form-descripcion" class="form-label text-uppercase small">Descripción</label>                           
+                            <label for="form-descripcion" class="form-label text-uppercase small">Descripción</label>
                             <textarea id="form-descripcion" class="form-control input-glass" rows="3" required></textarea>
                             <div class="invalid-feedback"></div>
                         </div>

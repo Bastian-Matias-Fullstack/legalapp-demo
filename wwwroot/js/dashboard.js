@@ -1,5 +1,4 @@
-﻿
-function configurarSidebarPorRoles(roles) {
+﻿function configurarSidebarPorRoles(roles) {
     roles = Array.isArray(roles) ? roles : [];
     const isAdmin = roles.includes("Admin");
     const isAbogado = roles.includes("Abogado");
@@ -40,7 +39,16 @@ function CanAccess(moduloId, roles) {
     // Por defecto, denegar
     return false;
 }
-      
+function clearSessionAndRedirect(reason = "session-ended") {
+    console.warn("Sesión finalizada:", reason);
+
+    localStorage.removeItem("jwt_token");
+    localStorage.removeItem("usuario_actual");
+    sessionStorage.removeItem("demoContext");
+
+    history.replaceState(null, "", "dashboard.html");
+    window.location.replace("login.html");
+}
 function obtenerRolesDesdeJWT() {
         const token = localStorage.getItem("jwt_token");
         if (!token) return [];
@@ -168,11 +176,7 @@ function resolverModuloInicial(roles, moduloSolicitado) {
     const roles = obtenerRolesDesdeJWT();
 
         if (!CanAccess(moduloId, roles)) {
-            const fallback =
-                roles.includes("Admin") ? "mod-dashboard" :
-                    roles.includes("Abogado") ? "mod-casos" :
-                        roles.includes("Soporte") ? "mod-usuarios" :
-                            "mod-dashboard";
+            const fallback = obtenerModuloDefaultPorRol(roles) || "mod-dashboard";
 
             Swal?.fire?.({
                 icon: "warning",
@@ -180,28 +184,30 @@ function resolverModuloInicial(roles, moduloSolicitado) {
                 text: "No tienes permisos para acceder a este módulo."
             });
 
-            // ✅ Mostrar fallback
+            // Mostrar fallback
             mostrarModulo(fallback);
+            history.replaceState(null, "", `#${fallback}`);
 
-            // ✅ Marcar activo el item del menú del fallback
+            // Marcar activo el item del menú del fallback
             document.querySelectorAll(".sidebar-menu li")
                 .forEach(li => li.classList.remove("active"));
 
             const fallbackNavId = "nav-" + fallback.replace("mod-", "");
             document.getElementById(fallbackNavId)?.classList.add("active");
 
-            // ✅ Ejecutar lógica de carga del módulo fallback
+            //  Ejecutar lógica de carga del módulo fallback
             onModuloCargado(fallback);
 
-            // ✅ Reaplicar visibilidad por roles
+            //Reaplicar visibilidad por roles
             aplicarVisibilidadPorRol(roles);
 
             return;
         }
 
-    mostrarModulo(moduloId);
+        mostrarModulo(moduloId);
+        history.replaceState(null, "", `#${moduloId}`);
   
-    // 2️⃣ Estado activo del menú
+    // 2️ Estado activo del menú
     document.querySelectorAll(".sidebar-menu li")
         .forEach(li => li.classList.remove("active"));
 
@@ -243,24 +249,20 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const token = localStorage.getItem("jwt_token");
     if (!token) {
-        alert("Token no encontrado. Redirigiendo al login...");
-        window.location.href = "login.html";
+        clearSessionAndRedirect("missing-token");
         return;
     }
+
+
     const roles = normalizarRoles(obtenerRolesDesdeJWT());
 
     if (!tieneRolValido(roles)) {
-        localStorage.removeItem("jwt_token");
-        localStorage.removeItem("usuario_actual");
-        sessionStorage.removeItem("demoContext");
-        window.location.hash = "";
-
         Swal?.fire?.({
             icon: "warning",
             title: "Acceso no disponible",
             text: "Tu cuenta no tiene un rol asignado. No es posible ingresar a esta demo."
         }).then(() => {
-            window.location.href = "login.html";
+            clearSessionAndRedirect("no-valid-role");
         });
 
         return;
@@ -275,13 +277,11 @@ document.addEventListener("DOMContentLoaded", () => {
     const decision = resolverModuloInicial(roles, moduloSolicitado);
 
     if (!decision.allowed || !decision.target) {
-        localStorage.removeItem("jwt_token");
-        localStorage.removeItem("usuario_actual");
-        sessionStorage.removeItem("demoContext");
-        window.location.href = "login.html";
-        window.location.hash = "";
+        clearSessionAndRedirect("invalid-initial-module-decision");
         return;
     }
+    document.body.classList.remove("auth-pending");
+    document.body.classList.add("auth-ready");
 
     if (decision.reason === "requested-denied-fallback") {
         Swal?.fire?.({
@@ -294,22 +294,21 @@ document.addEventListener("DOMContentLoaded", () => {
     navigate(decision.target);
 
     const apiUrl = "api/Casos";
-    /*➡️ Define la URL base para la API de casos.
-    */
-    /*➡️ Recupera el token JWT desde localStorage (para autorizar las peticiones).*/
+    /* Define la URL base para la API de casos.*/
+    /*Recupera el token JWT desde localStorage (para autorizar las peticiones).*/
     let usuario = JSON.parse(localStorage.getItem("usuario_actual"));
     if (!usuario) {
         // Si no existe usuario, asignamos un objeto vacío
         usuario = {};
     }
-    /*➡️ Obtiene el usuario actual guardado (si existe).*/
+    /* Obtiene el usuario actual guardado (si existe).*/
     const saludo = document.getElementById("saludoUsuario");
-    /*➡️ Elemento donde mostrarás “Hola, Usuario”.*/
+    /* Elemento donde mostrarás “Hola, Usuario”.*/
 
     console.log("Rol del usuario:", roles);
 
-    // 1️⃣ Siempre aplicar reglas de rol (base de la app)
-    // 2️⃣ Solo si existe demoContext, se aplica encima (modo demo)
+    // Siempre aplicar reglas de rol (base de la app)
+    // Solo si existe demoContext, se aplica encima (modo demo)
 
     // Aplicamos Choise.Js
     const filtroEstado = document.getElementById("filtroEstado");
@@ -347,7 +346,7 @@ paginacion?.addEventListener("click", (e) => {
     }
 });
 
-    /**➡️ Ejecuta carga inicial. */
+    /* Ejecuta carga inicial.*/
     filtroEstado.addEventListener("change", () => {
         const estadoSeleccionado = filtroEstado.value?.trim();
         filtros.estado = estadoSeleccionado || null;
@@ -356,7 +355,7 @@ paginacion?.addEventListener("click", (e) => {
 
         cargarCasosDesdeBackend();
     });
-    /**➡️ Actualiza el filtro de estado y recarga la tabla */
+    /* Actualiza el filtro de estado y recarga la tabla */
     function construirQueryString(filtros) {
         const params = new URLSearchParams();
         if (filtros.estado) params.append("estado", filtros.estado);
@@ -364,7 +363,7 @@ paginacion?.addEventListener("click", (e) => {
         if (filtros.tamanio) params.append("tamanio", filtros.tamanio);
         return "?" + params.toString();
     }
-    /**➡️ Transforma tu objeto filtros en un query string para el fetch. */
+    /*Transforma tu objeto filtros en un query string para el fetch.*/
     async function cargarCasosDesdeBackend() {
         const query = construirQueryString(filtros);
 
@@ -377,10 +376,7 @@ paginacion?.addEventListener("click", (e) => {
 
         if (!response.ok) {
             if (response.status === 401) {
-                alert("Sesión expirada. Redirigiendo...");
-                localStorage.removeItem("jwt_token");
-                localStorage.removeItem("usuario_actual");
-                window.location.href = "login.html";
+                clearSessionAndRedirect("expired-session-401");
                 return;
             }
 
@@ -390,7 +386,7 @@ paginacion?.addEventListener("click", (e) => {
 
         const data = await response.json();
 
-        // ✅ Validación mínima para evitar errores si backend falla
+        // Validación mínima para evitar errores si backend falla
         if (!data.items || !data.resumen) {
             console.warn("⚠️ La respuesta del backend no tiene el formato esperado:", data);
             document.getElementById("contadorResultados").textContent =
@@ -452,10 +448,8 @@ paginacion?.addEventListener("click", (e) => {
             tbody.innerHTML += row;
         });
 
-        /**➡️ Limpia y vuelve a renderizar la tabla de casos con animación suave (opacity).
-➡️ Inserta HTML dinámico fila por fila */
-
-
+        /** Limpia y vuelve a renderizar la tabla de casos con animación suave (opacity).
+ Inserta HTML dinámico fila por fila */
 
         setTimeout(() => {
             tbody.classList.remove("opacity-0");
@@ -487,16 +481,14 @@ paginacion?.addEventListener("click", (e) => {
         document.getElementById("casosPendientes").textContent = resumen.pendientes;
         document.getElementById("casosResueltos").textContent = resumen.resueltos;
     }
-    /**➡️ Muestra totales y contadores en la parte superior del dashboard.
-     * 
- */
+    /** Muestra totales y contadores en la parte superior del dashboard. */
     function mostrarMensajeInformativo(mostrados, total) {
         const estadoTabla = document.getElementById("contadorResultados");
         if (!estadoTabla) return;
         estadoTabla.textContent = `Mostrando ${mostrados} de ${total} casos`;
     }
 
-    /** ℹ️ Mensaje inferior: “Mostrando X de Y casos”*/
+    /** Mensaje inferior: “Mostrando X de Y casos”*/
     function mostrarDetalleCaso(id) {
         fetch(`${apiUrl}/${id}`, {
             headers: {
@@ -534,8 +526,8 @@ paginacion?.addEventListener("click", (e) => {
             });
     }
 
-    /**➡️ Trae los datos de un caso por ID.
-➡️ Rellena un modal Bootstrap para mostrar info detallada */
+    /* Trae los datos de un caso por ID.
+Rellena un modal Bootstrap para mostrar info detallada */
 
     function getEstadoBadge(estado) {
         switch (estado.toLowerCase()) {
@@ -550,7 +542,7 @@ paginacion?.addEventListener("click", (e) => {
         }
     }
 
-    /**➡️ Devuelven HTML para mostrar el estado y tipo con íconos y colores personalizados. */
+    /*Devuelven HTML para mostrar el estado y tipo con íconos y colores personalizados. */
     function getTipoIcono(tipo) {
         switch (tipo.toLowerCase()) {
             case "laboral":
@@ -566,7 +558,7 @@ paginacion?.addEventListener("click", (e) => {
         }
     }
 
-    // 🔁 Función reutilizable para mostrar errores claros al usuario
+    // Función reutilizable para mostrar errores claros al usuario
     async function mostrarErrorDesdeResponse(respuesta, mensajePorDefecto) {
         try {
             const errorJson = await respuesta.json();
@@ -585,9 +577,7 @@ paginacion?.addEventListener("click", (e) => {
             });
         }
     }
-    // ===============================
-// ✅ VALIDACIÓN INLINE (helpers)
-// ===============================
+//  VALIDACIÓN INLINE (helpers)
 function clearInvalid(form) {
   if (!form) return;
   form.querySelectorAll(".is-invalid").forEach(el => el.classList.remove("is-invalid"));
@@ -641,7 +631,7 @@ function validateCasoForm() {
 
     // Limpia el token y usuario del almacenamiento, redirige al login. **/
     document.addEventListener("click", async (e) => {
-        // 👁 Ver detalle
+        // Ver detalle
 
         if (e.target.closest(".btn-ver")) {
             const btn = e.target.closest(".btn-ver");
@@ -649,7 +639,7 @@ function validateCasoForm() {
             mostrarDetalleCaso(id);
         }
 
-        // ✏️ EDITAR
+        // EDITAR
     if (e.target.closest(".btn-outline-warning")) {
         const row = e.target.closest("tr");
         const id = row.children[0].textContent;
@@ -752,7 +742,7 @@ if (estadoVisual === "Pendiente") {
     Swal.fire("Error", "No se pudo cargar el caso", "error");
 }
         }    
-        // 🗑️ Eliminar con SweetAlert (esto va *fuera* del bloque de editar)
+        // Eliminar con SweetAlert (esto va *fuera* del bloque de editar)
         if (e.target.closest(".btn-eliminar")) {
             const btn = e.target.closest(".btn-eliminar");
             const id = btn.dataset.id;
@@ -767,10 +757,10 @@ if (estadoVisual === "Pendiente") {
                     title: "No se puede eliminar",
                     text: "Este caso está cerrado y no puede ser eliminado.",
                 });
-                return; // ⚠️ No seguimos con el fetch
+                return; // No seguimos con el fetch
             }
 
-            // ✅ Confirmación visual
+            // Confirmación visual
             Swal.fire({
                 title: '¿Estás seguro?',
                 text: "Esta acción eliminará el caso permanentemente.",
@@ -799,7 +789,7 @@ if (estadoVisual === "Pendiente") {
                         if (!res.ok) {
                             const errorJson = await res.json();
                             const mensajeError = errorJson.detail || "Error inesperado";
-                            // ⚠️ Mostrar mensaje personalizado según tipo de error
+                            // Mostrar mensaje personalizado según tipo de error
                             if (res.status === 400 || res.status === 404 || res.status === 409) {
                                 Swal.fire({
                                     icon: 'warning',
@@ -833,11 +823,11 @@ if (estadoVisual === "Pendiente") {
                 }
             });
         }
-        // 🔒 Cerrar caso
+        // Cerrar caso
         if (e.target.closest(".btn-cerrar")) {
             const btn = e.target.closest(".btn-cerrar");
             const id = btn.dataset.id;
-            // 🔄 Preguntar motivo de cierre
+            // Preguntar motivo de cierre
             const { value: motivo } = await Swal.fire({
                 title: "Cerrar caso",
                 input: "textarea",
@@ -901,10 +891,10 @@ if (estadoVisual === "Pendiente") {
         // Limpiar opciones previas por si viene de modo edición
 
         document.getElementById("formGestionCaso").reset();
-        // ✅ Reset visual de validaciones inline (paso 1)
+        //Reset visual de validaciones inline (paso 1)
 clearInvalid(document.getElementById("formGestionCaso"));
 
-// ✅ Asegurar que el botón Guardar siempre vuelva (fix submit oculto en edición Cerrado)
+//Asegurar que el botón Guardar siempre vuelva (fix submit oculto en edición Cerrado)
 const submitBtn = document.querySelector('button[form="formGestionCaso"][type="submit"]');
 if (submitBtn) {
     submitBtn.style.display = ""; // vuelve a mostrarse si estaba oculto
@@ -912,24 +902,24 @@ if (submitBtn) {
     submitBtn.innerHTML = '<i class="bi bi-save me-1"></i> Guardar Cambios';
 }
 
-// ✅ Asegurar que los campos vuelvan habilitados (nuevo caso = editable)
+// Asegurar que los campos vuelvan habilitados (nuevo caso = editable)
 ["form-titulo", "form-descripcion", "form-tipo", "form-cliente"].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.disabled = false;
 });
 
         document.getElementById("form-id").value = ""; // dejar vacío para saber que es nuevo
-        // 🆕 Limpiar campo cliente (solo visual)
+        // Limpiar campo cliente (solo visual)
         document.getElementById("form-cliente").value = "";
               
    
             const clienteSelect = document.getElementById("form-cliente");
             clienteSelect.disabled = false;   
             clienteSelect.innerHTML = `<option value="">-- Seleccione cliente --</option>`;
-            await cargarClientes();                   // ✅ CLAVE// ✅ select, no readonly
+            await cargarClientes();                   //  CLAVE, select, no readonly
         
-        document.getElementById("grupo-cliente").style.display = "block"; // ✅ Mostrar campo
-            // 🔧 ESTADO VISUAL POR DEFECTO (NUEVO CASO)
+        document.getElementById("grupo-cliente").style.display = "block"; // Mostrar campo
+            // ESTADO VISUAL POR DEFECTO (NUEVO CASO)
         const estadoSpan = document.getElementById("form-estado");
         estadoSpan.textContent = "Pendiente";
         estadoSpan.className = "badge estado-pendiente";
@@ -944,9 +934,7 @@ if (submitBtn) {
 
     document.getElementById("formGestionCaso")?.addEventListener("submit", async (e) => {
         e.preventDefault();
-        // ===============================
-        // ⏳ Loading state (Paso 4)
-        // ===============================
+        //  Loading state 
         const submitBtn = document.querySelector(
           'button[form="formGestionCaso"][type="submit"]'
         );
@@ -1002,10 +990,10 @@ if (submitBtn) {
         throw response; // ⬅️ NO lo parses aquí
     }
 
-    // ✅ ÉXITO
+    //  ÉXITO
     bootstrap.Modal.getInstance(document.getElementById("modalGestionCaso")).hide();
 
-    // ✅ Recarga la tabla
+    // Recarga la tabla
     await cargarCasosDesdeBackend();
 
     Swal.fire({
@@ -1021,7 +1009,7 @@ if (submitBtn) {
 } catch (error) {
     console.error("❌ Error al guardar caso:", error);
 
-    // ✅ Error backend (viene como Response)
+    //  Error backend (viene como Response)
     if (error instanceof Response) {
         const msg = await mostrarErrorDesdeResponse(
             error,
@@ -1030,7 +1018,7 @@ if (submitBtn) {
                 : "No se pudo actualizar el caso."
         );
 
-        // 🎯 REGLA DE NEGOCIO ESPECÍFICA (si el backend lo dice)
+        //  REGLA DE NEGOCIO ESPECÍFICA (si el backend lo dice)
         if (msg && msg.toLowerCase().includes("cliente ya tiene")) {
             Swal.fire({
                 icon: 'warning',
@@ -1040,7 +1028,7 @@ if (submitBtn) {
         }
 
     } else {
-        // ✅ Error de conexión / JS
+        // Error de conexión / JS
         Swal.fire({
             icon: 'error',
             title: 'Error de conexión',
@@ -1057,9 +1045,7 @@ if (submitBtn) {
 
     });
 });
-// ===============================
-// 🔹 CONTROLADOR DE MÓDULOS (NUEVO)
-// ===============================
+// CONTROLADOR DE MÓDULOS (NUEVO)
 const MODULOS = [
     //'mod-dashboard',
     'mod-casos',
@@ -1075,9 +1061,7 @@ function mostrarModulo(id) {
     const activo = document.getElementById(id);
     if (activo) activo.classList.remove('d-none');
 }
-// ===============================
-// 🔹 LOADER POR MÓDULO (PASO 1)
-// ===============================
+// LOADER POR MÓDULO (PASO 1)
 function onModuloCargado(moduloId) {
   switch (moduloId) {
     case "mod-casos":
@@ -1096,10 +1080,7 @@ function onModuloCargado(moduloId) {
 
   }
 }
-
-// ===============================
-// 🔹 SIDEBAR (UX / NAVEGACIÓN)
-// ===============================
+// SIDEBAR (UX / NAVEGACIÓN)
 function toggleSidebar() {
     document.getElementById("sidebar")
         ?.classList.toggle("collapsed");
@@ -1116,8 +1097,8 @@ async function cargarClientes() {
 
     clientes.forEach(c => {
         const option = document.createElement("option");
-        option.value = c.id;          // 👈 Id de la BD
-        option.textContent = c.nombre; // 👈 Nombre visible
+        option.value = c.id;          // Id de la BD
+        option.textContent = c.nombre; // Nombre visible
         select.appendChild(option);
     });
 }

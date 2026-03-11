@@ -106,8 +106,7 @@ document.getElementById("loginForm").addEventListener("submit", async function (
 
         // Limpieza opcional para no reutilizarlo en el siguiente login
         sessionStorage.removeItem("demoContext");
-                window.location.href = "dashboard.html" + hash;
-
+        window.location.replace("dashboard.html" + hash);
 
 
     } catch (error) {
