@@ -1045,6 +1045,7 @@ if (submitBtn) {
 
     });
 });
+
 // CONTROLADOR DE MÓDULOS (NUEVO)
 const MODULOS = [
     //'mod-dashboard',
@@ -1104,3 +1105,10 @@ async function cargarClientes() {
 }
 
 
+window.addEventListener("hashchange", () => {
+    const hashModulo = (window.location.hash || "").replace("#", "").trim();
+
+    if (!hashModulo) return;
+
+    navigate(hashModulo);
+});
