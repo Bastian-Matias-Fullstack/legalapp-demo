@@ -231,6 +231,20 @@ builder.Services.AddRateLimiter(options =>
                     QueueLimit = 0
                 });
         }
+        // 1.5) WARMUP (estricto y barato)
+        // 1.5) SYSTEM (ping + warmup) - estricto y barato
+        if (path == "/api/system/warmup" || path == "/api/system/ping")
+        {
+            return RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: $"system:{path}:{ip}",
+                factory: _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = 8,
+                    Window = TimeSpan.FromMinutes(1),
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                    QueueLimit = 0
+                });
+        }
         // 2) WRITES (POST/PUT/DELETE) - estricto
         if (method is "POST" or "PUT" or "DELETE" or "PATCH")
         {
