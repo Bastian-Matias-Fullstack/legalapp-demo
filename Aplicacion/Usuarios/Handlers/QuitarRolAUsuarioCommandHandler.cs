@@ -29,6 +29,8 @@ namespace Aplicacion.Usuarios.Handlers
             {
                 throw new KeyNotFoundException("Usuario no encontrado.");
             }
+            if (usuario.EsDemoProtegido)
+                throw new InvalidOperationException("Este usuario forma parte del entorno de demostración y no puede modificar sus roles.");
             var usuarioRol = usuario.UsuarioRoles.FirstOrDefault(ur => ur.RolId == rol.Id);
             if (usuarioRol == null)
             {

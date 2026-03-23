@@ -1,4 +1,5 @@
-﻿using Aplicacion.Repositorio;
+﻿using Aplicacion.Excepciones;
+using Aplicacion.Repositorio;
 using Aplicacion.Usuarios.Commands;
 using Dominio.Entidades;
 using MediatR;
@@ -24,18 +25,18 @@ namespace Aplicacion.Usuarios.Handlers
             var usuario = await _usuarioRepositorio.ObtenerPorIdAsync(request.UsuarioId);
             if (usuario == null)
                 throw new Exception("Usuario no encontrado");
+            if (usuario.EsDemoProtegido)
+                throw new InvalidOperationException("Este usuario forma parte del entorno de demostración y no puede modificar sus roles.");
 
             // Paso 2: Validamos que el rol exista
             var nombreRol = request.NombreRol.Trim();
             var rol = await _rolRepositorio.ObtenerPorNombreAsync(nombreRol);
             if (rol == null)
-                throw new Exception("Rol no encontrado");
-
+                throw new NotFoundException("Rol no encontrado.");
             // Paso 3: Validamos si el usuario ya tiene ese rol
             var yaTieneRol = usuario.UsuarioRoles.Any(ur => ur.RolId == rol.Id);
             if (yaTieneRol)
-                throw new Exception("El usuario ya tiene este rol asignado");
-
+                throw new BusinessConflictException("El usuario ya tiene este rol asignado.");
             // Paso 4: Asignamos el nuevo rol al usuario
             usuario.UsuarioRoles.Add(new UsuarioRol
             {

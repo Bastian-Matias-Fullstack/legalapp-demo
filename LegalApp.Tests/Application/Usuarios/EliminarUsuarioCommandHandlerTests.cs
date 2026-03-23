@@ -130,5 +130,44 @@ namespace Tests.Application.Usuarios
             Times.Never
 );
         }
+        [Fact]
+        public async Task Handle_UsuarioDemoProtegido_LanzaBusinessConflictException()
+        {
+            // Arrange
+            var usuarioId = 10;
+            var usuario = new Usuario("Admin Demo", "admin@legal.cl", "hash")
+            {
+                EsDemoProtegido = true
+            };
+
+            _usuarioRepositorioMock
+                .Setup(r => r.ObtenerPorIdAsync(usuarioId))
+                .ReturnsAsync(usuario);
+
+            // Act & Assert
+            var ex = await Assert.ThrowsAsync<BusinessConflictException>(() =>
+                _handler.Handle(
+                    new EliminarUsuarioCommand(usuarioId),
+                    CancellationToken.None
+                )
+            );
+
+            Assert.Contains("demostración", ex.Message);
+
+            _casoRepositoryMock.Verify(
+                r => r.ExistenCasosCreadosPorUsuarioAsync(It.IsAny<string>()),
+                Times.Never
+            );
+
+            _usuarioRepositorioMock.Verify(
+                r => r.EliminarAsync(It.IsAny<Usuario>()),
+                Times.Never
+            );
+
+            _usuarioRepositorioMock.Verify(
+                r => r.GuardarCambiosAsync(),
+                Times.Never
+            );
+        }
     }
 }

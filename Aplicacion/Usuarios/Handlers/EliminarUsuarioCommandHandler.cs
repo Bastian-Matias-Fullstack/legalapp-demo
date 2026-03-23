@@ -15,14 +15,20 @@ namespace Aplicacion.Usuarios.Commands
         }
         public async Task<Unit> Handle(EliminarUsuarioCommand request, CancellationToken cancellationToken)
         {
+
+
             if (request.UsuarioId <= 0)
                 throw new BusinessConflictException("Id de usuario inválido.");
-                    var usuario = await _repositorio.ObtenerPorIdAsync(request.UsuarioId);
+            var usuario = await _repositorio.ObtenerPorIdAsync(request.UsuarioId);
+
             if (usuario is null)
-                throw new NotFoundException(
-                    $"Usuario con id {request.UsuarioId} no existe.");
+                throw new NotFoundException($"Usuario con id {request.UsuarioId} no existe.");
+            
+            if (usuario.EsDemoProtegido)
+                throw new BusinessConflictException("Este usuario forma parte del entorno de demostración y no puede eliminarse.");
             var tieneCasos = await _casoRepository
                 .ExistenCasosCreadosPorUsuarioAsync(usuario.Email);
+
             if (tieneCasos)
                 throw new BusinessConflictException(
                     "No se puede eliminar el usuario porque tiene casos asociados.");

@@ -165,5 +165,35 @@ namespace Tests.Application.Usuarios
                 Times.Never
             );
         }
+        [Fact]
+        public async Task Handle_UsuarioDemoProtegido_LanzaInvalidOperationException()
+        {
+            var usuario = new Usuario("Admin Demo", "admin@legal.cl", "hash")
+            {
+                Id = 1,
+                EsDemoProtegido = true,
+                UsuarioRoles = new List<UsuarioRol>()
+            };
+
+            _usuarioRepositorioMock
+                .Setup(r => r.ObtenerPorIdAsync(usuario.Id))
+                .ReturnsAsync(usuario);
+
+            var command = new AsignarRolAUsuarioCommand
+            {
+                UsuarioId = usuario.Id,
+                NombreRol = "Admin"
+            };
+
+            var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                _handler.Handle(command, CancellationToken.None)
+            );
+
+            Assert.Contains("demostración", ex.Message);
+
+            _rolRepositorioMock.Verify(r => r.ObtenerPorNombreAsync(It.IsAny<string>()), Times.Never);
+            _usuarioRepositorioMock.Verify(r => r.GuardarCambiosAsync(), Times.Never);
+        }
+
     }
 }

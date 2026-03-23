@@ -24,7 +24,51 @@ if (demoContext) {
 } else {
     sessionStorage.removeItem("demoContext");
 }
+const passwordInput = document.getElementById("password");
+const togglePasswordBtn = document.getElementById("togglePassword");
+const eyeIcon = togglePasswordBtn?.querySelector(".eye-icon");
 
+if (passwordInput && togglePasswordBtn) {
+    const showPassword = () => {
+        passwordInput.type = "text";
+        togglePasswordBtn.setAttribute("aria-label", "Soltar para ocultar contraseña");
+        togglePasswordBtn.setAttribute("title", "Soltar para ocultar contraseña");
+        if (eyeIcon) eyeIcon.textContent = "◎";
+    };
+
+    const hidePassword = () => {
+        passwordInput.type = "password";
+        togglePasswordBtn.setAttribute("aria-label", "Mantener presionado para ver contraseña");
+        togglePasswordBtn.setAttribute("title", "Mantener presionado para ver contraseña");
+        if (eyeIcon) eyeIcon.textContent = "◉";
+    };
+
+    togglePasswordBtn.addEventListener("mousedown", showPassword);
+    togglePasswordBtn.addEventListener("mouseup", hidePassword);
+    togglePasswordBtn.addEventListener("mouseleave", hidePassword);
+
+    togglePasswordBtn.addEventListener("touchstart", (e) => {
+        e.preventDefault();
+        showPassword();
+    }, { passive: false });
+
+    togglePasswordBtn.addEventListener("touchend", hidePassword);
+    togglePasswordBtn.addEventListener("touchcancel", hidePassword);
+
+    togglePasswordBtn.addEventListener("keydown", (e) => {
+        if (e.code === "Space" || e.code === "Enter") {
+            e.preventDefault();
+            showPassword();
+        }
+    });
+
+    togglePasswordBtn.addEventListener("keyup", (e) => {
+        if (e.code === "Space" || e.code === "Enter") {
+            e.preventDefault();
+            hidePassword();
+        }
+    });
+}
 
 document.getElementById("loginForm").addEventListener("submit", async function (e) {
     e.preventDefault();

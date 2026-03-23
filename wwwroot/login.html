@@ -10,8 +10,8 @@
 </head>
 <body>
     <!-- Video de fondo -->
-    <video autoplay muted loop id="bg-video">
-        <source src="videos/istockphoto-515735920-640_adpp_is.mp4" type="video/mp4">
+    <video autoplay muted loop playsinline preload="auto" id="bg-video" poster="img/fondo-legal.jpg">
+        <source src="videos/login-pingpong.mp4" type="video/mp4">
         Tu navegador no soporta video HTML5.
     </video>
     <div class="overlay"></div>
@@ -26,7 +26,6 @@
                     <img src="img/scales.svg" alt="Logo Legal" class="icono-logo">
                     <span class="titulo-con-glow">Aplicación de casos legales</span>
                 </h2>
-
                 <div class="mb-3">
                     <label for="email" class="form-label">Correo</label>
                     <input type="text" id="email" class="form-control">
@@ -34,7 +33,22 @@
 
                 <div class="mb-3">
                     <label for="password" class="form-label">Contraseña</label>
-                    <input type="password" id="password" class="form-control">
+
+                    <div class="password-field">
+                        <input type="password"
+                               id="password"
+                               class="form-control password-input"
+                               autocomplete="current-password">
+
+                        <button type="button"
+                                id="togglePassword"
+                                class="toggle-password-btn"
+                                aria-label="Mostrar contraseña"
+                                aria-pressed="false"
+                                title="Mostrar contraseña">
+                            👁
+                        </button>
+                    </div>
                 </div>
 
                 <div class="mb-3">

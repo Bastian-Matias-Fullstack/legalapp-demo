@@ -6,6 +6,7 @@ namespace Dominio.Entidades
     public class Usuario
     {
         public int Id { get; set; }
+        public bool EsDemoProtegido { get; set; } = false;
 
         [Required, StringLength(100)]
         public string Nombre { get; set; } = string.Empty;

@@ -30,12 +30,13 @@ async function cargarUsuariosEnRoles() {
     placeholder.selected = true;
     select.appendChild(placeholder);
 
-  usuarios.forEach(u => {
-    const option = document.createElement("option");
-    option.value = u.id;
-    option.textContent = u.nombre;
-    select.appendChild(option);
-  });
+    usuarios.forEach(u => {
+        const option = document.createElement("option");
+        option.value = u.id;
+        option.textContent = u.esDemoProtegido ? `${u.nombre} (protegido)` : u.nombre;
+        option.dataset.protegido = u.esDemoProtegido ? "true" : "false";
+        select.appendChild(option);
+    });
   // recrear Choices desde cero
   choicesUsuarios = new Choices(select, {
     searchEnabled: false,
@@ -130,6 +131,17 @@ document.getElementById("btnAsignarRol")?.addEventListener("click", async () => 
     const selectRoles = document.getElementById("selectRoles");
     const usuarioId = selectUsuarios?.value;
     const nombreRol = selectRoles?.value;
+    const usuarioSeleccionado = selectUsuarios.options[selectUsuarios.selectedIndex];
+    const esProtegido = usuarioSeleccionado?.dataset?.protegido === "true";
+
+    if (esProtegido) {
+        Swal.fire({
+            icon: "info",
+            title: "Usuario protegido",
+            text: "Este usuario forma parte del entorno de demostración y no puede modificar sus roles."
+        });
+        return;
+    }
 
     if (!usuarioId || !nombreRol) {
         Swal.fire({
@@ -185,6 +197,18 @@ document.getElementById("btnAsignarRol")?.addEventListener("click", async () => 
             const btn = e.target.closest(".btn-quitar-rol");
             const rol = btn.dataset.rol;
             const usuarioId = document.getElementById("selectUsuarios").value;
+            const selectUsuarios = document.getElementById("selectUsuarios");
+            const usuarioSeleccionado = selectUsuarios?.options[selectUsuarios.selectedIndex];
+            const esProtegido = usuarioSeleccionado?.dataset?.protegido === "true";
+
+            if (esProtegido) {
+                Swal.fire({
+                    icon: "info",
+                    title: "Usuario protegido",
+                    text: "Este usuario forma parte del entorno de demostración y no puede modificar sus roles."
+                });
+                return;
+            }
 
             if (!rol || !usuarioId) return;
 

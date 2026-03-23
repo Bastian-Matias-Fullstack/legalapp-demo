@@ -183,6 +183,39 @@ namespace Aplicacion.Tests.Usuarios
             _hashServiceMock.Verify(h => h.Hash(It.IsAny<string>()), Times.Never);
             _repositorioMock.Verify(r => r.GuardarCambiosAsync(), Times.Once);
         }
+        [Fact]
+        public async Task Handle_UsuarioDemoProtegido_LanzaInvalidOperationException()
+        {
+            var usuario = new Usuario
+            {
+                Id = 1,
+                Nombre = "Admin Demo",
+                Email = "admin@legal.cl",
+                PasswordHash = "hash",
+                EsDemoProtegido = true
+            };
+
+            _repositorioMock
+                .Setup(r => r.ObtenerPorIdAsync(1))
+                .ReturnsAsync(usuario);
+
+            var command = new ActualizarUsuarioCommand(
+                1,
+                "Nuevo Nombre",
+                "nuevo@legal.cl",
+                "123456"
+            );
+
+            var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                _handler.Handle(command, CancellationToken.None)
+            );
+
+            Assert.Contains("demostración", ex.Message);
+
+            _repositorioMock.Verify(r => r.ExisteEmailAsync(It.IsAny<string>(), It.IsAny<int>()), Times.Never);
+            _repositorioMock.Verify(r => r.GuardarCambiosAsync(), Times.Never);
+            _hashServiceMock.Verify(h => h.Hash(It.IsAny<string>()), Times.Never);
+        }
 
     }
 }

@@ -18,10 +18,10 @@ function clearFieldError(inputId) {
     if (feedback) feedback.textContent = "";
 }
 
-function clearUserFormErrors() {
-    ["nombreUsuario", "emailUsuario", "passwordUsuario"].forEach(clearFieldError);
-}
 
+function clearUserFormErrors() {
+    ["nombreUsuario", "emailUsuario", "password"].forEach(clearFieldError);
+}
 
 // usuarios.js
 // Este módulo carga, crea, edita y elimina usuarios desde el backend usando JWT
@@ -45,8 +45,8 @@ function configurarEventosUsuarios() {
         await guardarUsuario(); // Enviar datos al backend (POST o PUT)
     });
      // ✅ UX pro: limpiar error al escribir
-    ["nombreUsuario", "emailUsuario", "passwordUsuario"].forEach(id => {
-        const input = document.getElementById(id);
+    ["nombreUsuario", "emailUsuario", "password"].forEach(id => {
+    const input = document.getElementById(id);
         if (!input) return;
 
         input.addEventListener("input", () => {
@@ -72,6 +72,7 @@ async function cargarUsuarios() {
         }
         const usuarios = JSON.parse(text);
         renderizarUsuarios(usuarios);
+        renderizarCardsUsuarios(usuarios);
     } catch (error) {
         console.error("Error al cargar usuarios:", error);
     }
@@ -80,19 +81,94 @@ async function cargarUsuarios() {
 function renderizarUsuarios(usuarios) {
     const tbody = document.getElementById("usuariosBody");
     tbody.innerHTML = "";
+
     usuarios.forEach(usuario => {
         const tr = document.createElement("tr");
+
+        const protegidoBadge = usuario.esDemoProtegido
+            ? `<span class="badge text-bg-warning ms-2">Protegido</span>`
+            : "";
+
+        const btnEditar = usuario.esDemoProtegido
+            ? `<button class="btn btn-sm btn-outline-secondary me-1" disabled title="Usuario demo protegido">✏️</button>`
+            : `<button class="btn btn-sm btn-outline-light me-1" onclick='abrirModalUsuario(${JSON.stringify(usuario)})'>✏️</button>`;
+
+        const btnEliminar = usuario.esDemoProtegido
+            ? `<button class="btn btn-sm btn-outline-secondary" disabled title="Usuario demo protegido">🗑️</button>`
+            : `<button class="btn btn-sm btn-outline-danger" onclick='eliminarUsuario(${usuario.id}, false)'>🗑️</button>`;
+
         tr.innerHTML = `
             <td>${usuario.id}</td>
-            <td>${usuario.nombre}</td>
+            <td>${usuario.nombre} ${protegidoBadge}</td>
             <td>${usuario.email}</td>
             <td>${formatearRoles(usuario.roles)}</td>
             <td>
-                <button class="btn btn-sm btn-outline-light me-1" onclick='abrirModalUsuario(${JSON.stringify(usuario)})'>✏️</button>
-                <button class="btn btn-sm btn-outline-danger" onclick='eliminarUsuario(${usuario.id})'>🗑️</button>
+                ${btnEditar}
+                ${btnEliminar}
             </td>
         `;
+
         tbody.appendChild(tr);
+    });
+}
+function renderizarCardsUsuarios(usuarios) {
+    const cardsContainer = document.getElementById("usuariosCards");
+    if (!cardsContainer) return;
+
+    cardsContainer.innerHTML = "";
+
+    usuarios.forEach(usuario => {
+        const roles = Array.isArray(usuario.roles) ? usuario.roles : [];
+        const rolesHtml = roles.length
+            ? roles.map(r => `<span class="badge bg-info-subtle text-info-emphasis me-1 mb-1">${r}</span>`).join("")
+            : `<span class="badge bg-secondary-subtle text-secondary-emphasis">Sin rol</span>`;
+
+        const protegido = !!usuario.esDemoProtegido;
+
+        const btnEditar = protegido
+            ? `<button class="btn btn-sm btn-outline-secondary" disabled title="Usuario demo protegido">
+                    <i class="bi bi-pencil-fill"></i>
+               </button>`
+            : `<button class="btn btn-sm btn-outline-light btn-editar-usuario" onclick='abrirModalUsuario(${JSON.stringify(usuario)})' title="Editar">
+                    <i class="bi bi-pencil-fill"></i>
+               </button>`;
+
+        const btnEliminar = protegido
+            ? `<button class="btn btn-sm btn-outline-secondary" disabled title="Usuario demo protegido">
+                    <i class="bi bi-trash-fill"></i>
+               </button>`
+            : `<button class="btn btn-sm btn-outline-danger btn-eliminar-usuario" onclick='eliminarUsuario(${usuario.id}, false)' title="Eliminar">
+                    <i class="bi bi-trash-fill"></i>
+               </button>`;
+
+        const card = `
+            <article class="usuario-card" data-id="${usuario.id}">
+                <div class="usuario-card-header">
+                    <div class="usuario-card-title-wrap">
+                        <span class="usuario-card-id">#${usuario.id}</span>
+                        <h6 class="usuario-card-title mb-1">
+                            ${usuario.nombre}
+                            ${protegido ? `<span class="badge text-bg-warning ms-2">Protegido</span>` : ""}
+                        </h6>
+                        <div class="usuario-card-email">${usuario.email}</div>
+                    </div>
+                </div>
+
+                <div class="usuario-card-body">
+                    <div class="usuario-card-row">
+                        <span class="usuario-card-label">Roles</span>
+                        <div class="usuario-card-value">${rolesHtml}</div>
+                    </div>
+                </div>
+
+                <div class="usuario-card-actions">
+                    ${btnEditar}
+                    ${btnEliminar}
+                </div>
+            </article>
+        `;
+
+        cardsContainer.innerHTML += card;
     });
 }
 // Convierte array de roles en badges bonitos
@@ -100,15 +176,78 @@ function formatearRoles(roles) {
     if (!roles || roles.length === 0) return "-";
     return roles.map(r => `<span class='badge text-bg-primary me-1'>${r}</span>`).join("");
 }
+function inicializarTogglePasswordUsuario() {
+    const passwordInput = document.getElementById("password");
+    const togglePasswordBtn = document.getElementById("togglePassword");
+    const eyeIcon = togglePasswordBtn?.querySelector(".eye-icon");
+
+    if (!passwordInput || !togglePasswordBtn) return;
+
+    const showPassword = () => {
+        passwordInput.type = "text";
+        togglePasswordBtn.setAttribute("aria-label", "Soltar para ocultar contraseña");
+        togglePasswordBtn.setAttribute("title", "Soltar para ocultar contraseña");
+        if (eyeIcon) eyeIcon.textContent = "👁";
+    };
+
+    const hidePassword = () => {
+        passwordInput.type = "password";
+        togglePasswordBtn.setAttribute("aria-label", "Mantener presionado para ver contraseña");
+        togglePasswordBtn.setAttribute("title", "Mantener presionado para ver contraseña");
+        if (eyeIcon) eyeIcon.textContent = "◉";
+    };
+
+    togglePasswordBtn.onmousedown = showPassword;
+    togglePasswordBtn.onmouseup = hidePassword;
+    togglePasswordBtn.onmouseleave = hidePassword;
+
+    togglePasswordBtn.ontouchstart = (e) => {
+        e.preventDefault();
+        showPassword();
+    };
+    togglePasswordBtn.ontouchend = hidePassword;
+    togglePasswordBtn.ontouchcancel = hidePassword;
+
+    togglePasswordBtn.onkeydown = (e) => {
+        if (e.key === " " || e.key === "Enter") {
+            e.preventDefault();
+            showPassword();
+        }
+    };
+
+    togglePasswordBtn.onkeyup = (e) => {
+        if (e.key === " " || e.key === "Enter") {
+            e.preventDefault();
+            hidePassword();
+        }
+    };
+
+    hidePassword();
+}
 // ✏ Abre el modal con datos (si hay) o limpio para nuevo
 function abrirModalUsuario(usuario = null) {
-        clearUserFormErrors();
+    if (usuario?.esDemoProtegido) {
+        Swal.fire({
+            icon: "info",
+            title: "Usuario protegido",
+            text: "Este usuario forma parte del entorno de demostración y no puede modificarse."
+        });
+        return;
+    }
+
+    clearUserFormErrors();
     document.getElementById("formUsuario").reset();
     document.getElementById("usuarioId").value = usuario?.id || "";
     document.getElementById("nombreUsuario").value = usuario?.nombre || "";
     document.getElementById("emailUsuario").value = usuario?.email || "";
-    // Si es edición, la contraseña no es requerida
-    document.getElementById("passwordUsuario").required = !usuario;
+    const passwordInput = document.getElementById("password");
+    if (passwordInput) {
+        passwordInput.required = !usuario;
+        passwordInput.value = "";
+        passwordInput.type = "password";
+    }
+
+    inicializarTogglePasswordUsuario();
     const modal = new bootstrap.Modal(document.getElementById("modalUsuario"));
     modal.show();
 }
@@ -118,60 +257,60 @@ async function guardarUsuario() {
     // 1) Leer + normalizar (trim)
     const nombre = (document.getElementById("nombreUsuario").value ?? "").trim();
     const email = (document.getElementById("emailUsuario").value ?? "").trim();
-    const password = (document.getElementById("passwordUsuario").value ?? "").trim();
+    const password = (document.getElementById("password").value ?? "").trim();
     const esNuevo = !id;
 
     // 2) Validaciones (inline, sin SweetAlert)
-clearUserFormErrors();
+    clearUserFormErrors();
 
-const nombreRegex = /^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/;
-const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const nombreRegex = /^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/;
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-if (!nombre) {
-    setFieldError("nombreUsuario", "El nombre es obligatorio.");
-    document.getElementById("nombreUsuario").focus();
-    return;
-}
-if (nombre.length < 3) {
-    setFieldError("nombreUsuario", "El nombre debe tener al menos 3 caracteres.");
-    document.getElementById("nombreUsuario").focus();
-    return;
-}
-if (!nombreRegex.test(nombre)) {
-    setFieldError("nombreUsuario", "El nombre solo puede contener letras y espacios.");
-    document.getElementById("nombreUsuario").focus();
-    return;
-}
-
-if (!email) {
-    setFieldError("emailUsuario", "El email es obligatorio.");
-    document.getElementById("emailUsuario").focus();
-    return;
-}
-if (!emailRegex.test(email)) {
-    setFieldError("emailUsuario", "Email inválido.");
-    document.getElementById("emailUsuario").focus();
-    return;
-}
-
-if (esNuevo) {
-    if (!password) {
-        setFieldError("passwordUsuario", "La contraseña es obligatoria.");
-        document.getElementById("passwordUsuario").focus();
+    if (!nombre) {
+        setFieldError("nombreUsuario", "El nombre es obligatorio.");
+        document.getElementById("nombreUsuario").focus();
         return;
     }
-    if (password.length < 6) {
-        setFieldError("passwordUsuario", "La contraseña debe tener al menos 6 caracteres.");
-        document.getElementById("passwordUsuario").focus();
+    if (nombre.length < 3) {
+        setFieldError("nombreUsuario", "El nombre debe tener al menos 3 caracteres.");
+        document.getElementById("nombreUsuario").focus();
         return;
     }
-} else {
-    if (password && password.length < 6) {
-        setFieldError("passwordUsuario", "La contraseña debe tener al menos 6 caracteres.");
-        document.getElementById("passwordUsuario").focus();
+    if (!nombreRegex.test(nombre)) {
+        setFieldError("nombreUsuario", "El nombre solo puede contener letras y espacios.");
+        document.getElementById("nombreUsuario").focus();
         return;
     }
-}
+
+    if (!email) {
+        setFieldError("emailUsuario", "El email es obligatorio.");
+        document.getElementById("emailUsuario").focus();
+        return;
+    }
+    if (!emailRegex.test(email)) {
+        setFieldError("emailUsuario", "Email inválido.");
+        document.getElementById("emailUsuario").focus();
+        return;
+    }
+
+    if (esNuevo) {
+        if (!password) {
+            setFieldError("password", "La contraseña es obligatoria.");
+            document.getElementById("password").focus();
+            return;
+        }
+        if (password.length < 6) {
+            setFieldError("password", "La contraseña debe tener al menos 6 caracteres.");
+            document.getElementById("password").focus();
+            return;
+        }
+    } else {
+        if (password && password.length < 6) {
+            setFieldError("password", "La contraseña debe tener al menos 6 caracteres.");
+            document.getElementById("password").focus();
+            return;
+        }
+    }
 
     // ✅ Primero crea el objeto
     const payload = { nombre, email };
@@ -183,13 +322,12 @@ if (esNuevo) {
     const method = id ? "PUT" : "POST";
 
     // 🔒 UX pro: deshabilitar botón Guardar y mostrar spinner
-const form = document.getElementById("formUsuario");
-const btnSubmit = document.querySelector('button[type="submit"][form="formUsuario"]');
+    const btnSubmit = document.querySelector('button[type="submit"][form="formUsuario"]');
 
-if (!btnSubmit) {
-    console.warn("No se encontró el botón submit del formulario formUsuario.");
-    return;
-}
+    if (!btnSubmit) {
+        console.warn("No se encontró el botón submit del formulario formUsuario.");
+        return;
+    }
     btnSubmit.disabled = true;
     const originalHtml = btnSubmit.innerHTML;
     btnSubmit.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Guardando...';
@@ -208,19 +346,30 @@ if (!btnSubmit) {
 
         Swal.fire("Éxito", id ? "Usuario actualizado" : "Usuario creado", "success");
         bootstrap.Modal.getInstance(document.getElementById("modalUsuario")).hide();
-       await cargarUsuarios(); //mejor esperar
-       window.refrescarUsuariosEnRoles?.(); //avisa al módulo Roles si está listo
+        await cargarUsuarios(); //mejor esperar
+        window.refrescarUsuariosEnRoles?.(); //avisa al módulo Roles si está listo
     } catch (error) {
         console.error(error);
         Swal.fire("Error", error.message, "error");
-    } finally{{
-         // 🔓 Restaurar botón siempre (éxito o error)
-        btnSubmit.disabled = false;
-        btnSubmit.innerHTML = originalHtml;
-    }}
+    } finally {
+        {
+            // 🔓 Restaurar botón siempre (éxito o error)
+            btnSubmit.disabled = false;
+            btnSubmit.innerHTML = originalHtml;
+        }
+    }
 }
 // ❌ Elimina un usuario después de confirmar con SweetAlert2
-async function eliminarUsuario(id) {
+async function eliminarUsuario(id, esDemoProtegido = false) {
+    if (esDemoProtegido) {
+        Swal.fire({
+            icon: "info",
+            title: "Usuario protegido",
+            text: "Este usuario forma parte del entorno de demostración y no puede eliminarse."
+        });
+        return;
+    }
+
     const confirm = await Swal.fire({
         title: "¿Eliminar usuario?",
         text: "Esta acción no se puede deshacer",
@@ -229,15 +378,20 @@ async function eliminarUsuario(id) {
         confirmButtonText: "Sí, eliminar",
         cancelButtonText: "Cancelar"
     });
+
     if (!confirm.isConfirmed) return;
+
     try {
         const res = await fetch(`/api/usuarios/${id}`, {
             method: "DELETE",
             headers: authHeader()
         });
+
         if (!res.ok) throw new Error("Error al eliminar usuario");
+
         Swal.fire("Eliminado", "El usuario fue eliminado", "success");
-        cargarUsuarios();
+        await cargarUsuarios();
+        window.refrescarUsuariosEnRoles?.();
     } catch (error) {
         console.error(error);
         Swal.fire("Error", error.message, "error");

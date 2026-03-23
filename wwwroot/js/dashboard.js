@@ -215,7 +215,10 @@ function resolverModuloInicial(roles, moduloSolicitado) {
     document.getElementById(navId)?.classList.add("active");
     // AQUÍ SE ENGANCHA EL PASO 1
     onModuloCargado(moduloId);
-    aplicarVisibilidadPorRol(roles);
+        aplicarVisibilidadPorRol(roles);
+        if (isMobileViewport()) {
+            closeSidebarMobile();
+        }
 }
 // Demo Context 
 const demoContext = sessionStorage.getItem("demoContext"); 
@@ -298,12 +301,29 @@ document.addEventListener("DOMContentLoaded", () => {
     /*Recupera el token JWT desde localStorage (para autorizar las peticiones).*/
     let usuario = JSON.parse(localStorage.getItem("usuario_actual"));
     if (!usuario) {
-        // Si no existe usuario, asignamos un objeto vacío
         usuario = {};
     }
-    /* Obtiene el usuario actual guardado (si existe).*/
-    const saludo = document.getElementById("saludoUsuario");
-    /* Elemento donde mostrarás “Hola, Usuario”.*/
+
+    const saludoDesktop = document.getElementById("saludoUsuario");
+    const saludoMobile = document.getElementById("saludoUsuarioMobile");
+
+    function renderSaludoUsuario(usuario) {
+        const nombreCompleto = (usuario?.nombre || "").trim();
+        const primerNombre = nombreCompleto.split(" ")[0] || "";
+
+        const textoDesktop = nombreCompleto ? `Hola, ${nombreCompleto}` : "Hola";
+        const textoMobile = primerNombre ? `Hola, ${primerNombre}` : "Hola";
+
+        if (saludoDesktop) {
+            saludoDesktop.textContent = textoDesktop;
+            saludoDesktop.setAttribute("title", textoDesktop);
+        }
+
+        if (saludoMobile) {
+            saludoMobile.textContent = textoMobile;
+            saludoMobile.setAttribute("title", textoMobile);
+        }
+    }
 
     console.log("Rol del usuario:", roles);
 
@@ -323,10 +343,11 @@ document.addEventListener("DOMContentLoaded", () => {
         pagina: 1,
         tamanio: 10
     };
-    /*Personaliza el saludo si el usuario tiene nombre guardado.*/
-    if (saludo && usuario.nombre) {
-        saludo.textContent = `Hola, ${usuario.nombre}`;
-    }
+    renderSaludoUsuario(usuario);
+
+    window.addEventListener("resize", () => {
+        renderSaludoUsuario(usuario);
+    });
     cargarCasosDesdeBackend();
 // PAGINACIÓN: listener único 
 const paginacion = document.getElementById("paginacion");
@@ -395,6 +416,7 @@ paginacion?.addEventListener("click", (e) => {
         }
 
         renderizarTabla(data.items);
+        renderizarCardsCasos(data.items);
         actualizarResumen(data.resumen);
         mostrarMensajeInformativo(data.items.length, data.totalRegistros);
         renderizarPaginacion(data.pagina, data.totalPaginas);
@@ -455,6 +477,78 @@ paginacion?.addEventListener("click", (e) => {
             tbody.classList.remove("opacity-0");
             tbody.classList.add("opacity-100");
         }, 50);
+    }
+    function renderizarCardsCasos(lista) {
+        const cardsContainer = document.getElementById("casosCards");
+        if (!cardsContainer) return;
+
+        cardsContainer.innerHTML = "";
+
+        lista.forEach(caso => {
+            const estadoBadge = getEstadoBadge(caso.estado);
+            const tipoIcono = getTipoIcono(caso.tipoCaso);
+
+            const puedeCerrar = caso.estado.toLowerCase() !== "cerrado";
+            const puedeEditar = caso.estado.toLowerCase() !== "cerrado";
+            const puedeEliminar = caso.estado.toLowerCase() !== "cerrado";
+
+            const card = `
+            <article class="caso-card" data-id="${caso.id}" data-estado="${caso.estado}">
+                <div class="caso-card-header">
+                    <div class="caso-card-title-wrap">
+                        <span class="caso-card-id">#${caso.id}</span>
+                        <h6 class="caso-card-title mb-1">${caso.titulo}</h6>
+                    </div>
+                    <div class="caso-card-badge">
+                        ${estadoBadge}
+                    </div>
+                </div>
+
+                <div class="caso-card-body">
+                    <div class="caso-card-row">
+                        <span class="caso-card-label">Tipo</span>
+                        <span class="caso-card-value">${tipoIcono}${caso.tipoCaso}</span>
+                    </div>
+
+                    <div class="caso-card-row">
+                        <span class="caso-card-label">Cliente</span>
+                        <span class="caso-card-value">${caso.nombreCliente || "No Client"}</span>
+                    </div>
+
+                    <div class="caso-card-row">
+                        <span class="caso-card-label">Creación</span>
+                        <span class="caso-card-value">${new Date(caso.fechaCreacion).toLocaleDateString()}</span>
+                    </div>
+                </div>
+
+                <div class="caso-card-actions">
+                    <button class="btn btn-sm btn-outline-light me-1 btn-ver" data-id="${caso.id}" title="Ver">
+                        <i class="bi bi-eye-fill"></i>
+                    </button>
+
+                    ${puedeEditar ? `
+                        <button class="btn btn-sm btn-outline-warning btn-editar-caso" data-id="${caso.id}" data-estado="${caso.estado}" title="Editar">
+                            <i class="bi bi-pencil-fill"></i>
+                        </button>
+                    ` : ""}
+
+                    ${puedeEliminar ? `
+                        <button class="btn btn-sm btn-outline-danger btn-eliminar" data-id="${caso.id}" data-estado="${caso.estado}" title="Eliminar">
+                            <i class="bi bi-trash-fill"></i>
+                        </button>
+                    ` : ""}
+
+                    ${puedeCerrar ? `
+                        <button class="btn btn-sm btn-outline-secondary btn-cerrar" data-id="${caso.id}" data-estado="${caso.estado}" title="Cerrar">
+                            <i class="bi bi-lock-fill"></i>
+                        </button>
+                    ` : ""}
+                </div>
+            </article>
+        `;
+
+            cardsContainer.innerHTML += card;
+        });
     }
     function renderizarPaginacion(paginaActual, totalPaginas) {
         const paginacion = document.getElementById("paginacion");
@@ -592,33 +686,52 @@ function setInvalid(inputEl, message) {
 }
 
 function validateCasoForm() {
-  const form = document.getElementById("formGestionCaso");
-  const tituloEl = document.getElementById("form-titulo");
-  const descEl = document.getElementById("form-descripcion");
-  const tipoEl = document.getElementById("form-tipo");
-  const clienteEl = document.getElementById("form-cliente");
+        const form = document.getElementById("formGestionCaso");
+        const tituloEl = document.getElementById("form-titulo");
+        const descEl = document.getElementById("form-descripcion");
+        const tipoEl = document.getElementById("form-tipo");
+        const clienteEl = document.getElementById("form-cliente");
 
-  clearInvalid(form);
+        clearInvalid(form);
 
-  const titulo = tituloEl.value.trim();
-  const descripcion = descEl.value.trim();
-  const tipoCaso = tipoEl.value;
-  const clienteId = parseInt(clienteEl.value, 10);
+        const titulo = tituloEl.value.trim();
+        const descripcion = descEl.value.trim();
+        const tipoCaso = tipoEl.value;
+        const clienteId = parseInt(clienteEl.value, 10);
 
-  let ok = true;
+        let ok = true;
 
-  if (!titulo) { setInvalid(tituloEl, "Debes ingresar un título."); ok = false; }
-  else if (titulo.length < 5 || titulo.length > 150) { setInvalid(tituloEl, "Debe tener entre 5 y 150 caracteres."); ok = false; }
+        if (!titulo) {
+            setInvalid(tituloEl, "Debes ingresar un título.");
+            ok = false;
+        } else if (titulo.length < 5 || titulo.length > 150) {
+            setInvalid(tituloEl, "Debe tener entre 5 y 150 caracteres.");
+            ok = false;
+        }
 
-  if (!descripcion) { setInvalid(descEl, "Debes ingresar una descripción."); ok = false; }
-  else if (descripcion.length > 5000) { setInvalid(descEl, "No puede superar 5000 caracteres."); ok = false; }
+        if (!descripcion) {
+            setInvalid(descEl, "Debes ingresar una descripción.");
+            ok = false;
+        } else if (descripcion.length < 10) {
+            setInvalid(descEl, "La descripción debe tener al menos 10 caracteres.");
+            ok = false;
+        } else if (descripcion.length > 5000) {
+            setInvalid(descEl, "No puede superar 5000 caracteres.");
+            ok = false;
+        }
 
-  if (!tipoCaso) { setInvalid(tipoEl, "Debes seleccionar un tipo de caso."); ok = false; }
+        if (!tipoCaso) {
+            setInvalid(tipoEl, "Debes seleccionar un tipo de caso.");
+            ok = false;
+        }
 
-  if (!Number.isInteger(clienteId) || clienteId < 1) { setInvalid(clienteEl, "Debes seleccionar un cliente válido."); ok = false; }
+        if (!Number.isInteger(clienteId) || clienteId < 1) {
+            setInvalid(clienteEl, "Debes seleccionar un cliente válido.");
+            ok = false;
+        }
 
-  return ok;
-}
+        return ok;
+    }
 
 
     document.getElementById("logoutBtn")?.addEventListener("click", () => {
@@ -641,9 +754,17 @@ function validateCasoForm() {
 
         // EDITAR
     if (e.target.closest(".btn-outline-warning")) {
-        const row = e.target.closest("tr");
-        const id = row.children[0].textContent;
-        const estado = row.children[2].innerText.trim().toLowerCase();
+        const btn = e.target.closest(".btn-outline-warning, .btn-editar-caso");
+        const row = btn.closest("tr");
+        const card = btn.closest(".caso-card");
+
+        const id = btn.dataset.id || row?.children[0]?.textContent;
+        const estado = (
+            btn.dataset.estado ||
+            card?.dataset.estado ||
+            row?.children[2]?.innerText ||
+            ""
+        ).trim().toLowerCase();
 
         if (estado === "cerrado") {
             Swal.fire({
@@ -747,9 +868,15 @@ if (estadoVisual === "Pendiente") {
             const btn = e.target.closest(".btn-eliminar");
             const id = btn.dataset.id;
 
-            // 🔐 Validación local: no permitir eliminar si ya está cerrado
             const fila = btn.closest("tr");
-            const estado = fila.children[2].innerText.trim().toLowerCase(); // Columna de estado
+            const card = btn.closest(".caso-card");
+
+            const estado = (
+                btn.dataset.estado ||
+                card?.dataset.estado ||
+                fila?.children[2]?.innerText ||
+                ""
+            ).trim().toLowerCase();
 
             if (estado === "cerrado") {
                 Swal.fire({
@@ -1042,7 +1169,6 @@ if (submitBtn) {
     submitBtn.innerHTML = '<i class="bi bi-save me-1"></i> Guardar Cambios';
 }
         
-
     });
 });
 
@@ -1082,10 +1208,48 @@ function onModuloCargado(moduloId) {
   }
 }
 // SIDEBAR (UX / NAVEGACIÓN)
-function toggleSidebar() {
-    document.getElementById("sidebar")
-        ?.classList.toggle("collapsed");
+function isMobileViewport() {
+    return window.innerWidth <= 1199.98;
 }
+
+function toggleSidebar() {
+    const sidebar = document.getElementById("sidebar");
+    const overlay = document.getElementById("sidebarOverlay");
+
+    if (!sidebar) return;
+
+    if (isMobileViewport()) {
+        const willOpen = !sidebar.classList.contains("mobile-open");
+        sidebar.classList.toggle("mobile-open", willOpen);
+        overlay?.classList.toggle("show", willOpen);
+        return;
+    }
+
+    sidebar.classList.toggle("collapsed");
+}
+
+function closeSidebarMobile() {
+    const sidebar = document.getElementById("sidebar");
+    const overlay = document.getElementById("sidebarOverlay");
+
+    if (!sidebar) return;
+
+    sidebar?.classList.remove("mobile-open");
+    overlay?.classList.remove("show");
+}
+
+window.addEventListener("resize", () => {
+    const sidebar = document.getElementById("sidebar");
+    if (!sidebar) return;
+
+    if (window.innerWidth >= 1200) {
+        closeSidebarMobile();
+        sidebar.classList.remove("collapsed");
+    } else {
+        sidebar.classList.add("collapsed");
+        sidebar.classList.remove("mobile-open");
+    }
+});
 
 async function cargarClientes() {
     const response = await fetch("/api/Clientes", {
@@ -1104,11 +1268,9 @@ async function cargarClientes() {
     });
 }
 
-
 window.addEventListener("hashchange", () => {
     const hashModulo = (window.location.hash || "").replace("#", "").trim();
 
     if (!hashModulo) return;
-
     navigate(hashModulo);
 });

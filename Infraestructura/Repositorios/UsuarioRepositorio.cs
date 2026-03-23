@@ -45,6 +45,7 @@ namespace Infraestructura.Repositorios
                     Id = u.Id,
                     Nombre = u.Nombre,
                     Email = u.Email,
+                    EsDemoProtegido = u.EsDemoProtegido,
                     Roles = u.UsuarioRoles
                         .Select(ur => ur.Rol.Nombre)
                         .ToList()

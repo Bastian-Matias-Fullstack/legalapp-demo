@@ -96,3 +96,4 @@ La aplicación trabaja con los siguientes roles:
 La visibilidad en frontend es una capa UX; **los permisos reales se validan en backend**.
 
 Este archivo complementa el README principal del proyecto.
+
