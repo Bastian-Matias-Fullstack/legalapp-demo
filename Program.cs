@@ -135,7 +135,13 @@ builder.Services.AddSwaggerGen(c =>
 // 1) CORS (por configuración)
 var corsOrigins = builder.Configuration
     .GetSection("Cors:Origins")
-    .Get<string[]>() ?? Array.Empty<string>();
+    .Get<string[]>()?
+    .Where(origin => !string.IsNullOrWhiteSpace(origin))
+    .Select(origin => origin.Trim().TrimEnd('/'))
+    .Distinct(StringComparer.OrdinalIgnoreCase)
+    .ToArray()
+    ?? Array.Empty<string>();
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("PermitirFrontend", policy =>
@@ -143,10 +149,9 @@ builder.Services.AddCors(options =>
         if (corsOrigins.Length > 0)
         {
             policy.WithOrigins(corsOrigins)
-                  .AllowAnyHeader()
-                  .AllowAnyMethod();
+                  .WithMethods("GET", "HEAD")
+                  .AllowAnyHeader();
         }
-        // Si está vacío, no abrimos CORS (y en local con wwwroot no lo necesitas)
     });
 });
 // Autenticación con JWT
