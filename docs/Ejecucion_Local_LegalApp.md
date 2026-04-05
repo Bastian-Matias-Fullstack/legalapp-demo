@@ -1,4 +1,4 @@
-# Ejecución Local – LegalApp
+ Ejecución Local – LegalApp
 
 Este documento explica **cómo ejecutar la aplicación en local** cuando los archivos de configuración sensibles (`appsettings.json`) **no se versionan** por seguridad.
 
@@ -96,4 +96,6 @@ La aplicación trabaja con los siguientes roles:
 La visibilidad en frontend es una capa UX; **los permisos reales se validan en backend**.
 
 Este archivo complementa el README principal del proyecto.
+para levantar en ambiente de produccion
+
 

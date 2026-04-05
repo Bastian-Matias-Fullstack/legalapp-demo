@@ -24,6 +24,47 @@ if (demoContext) {
 } else {
     sessionStorage.removeItem("demoContext");
 }
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+let warmupPromise = null;
+let warmupReady = false;
+
+async function ensureBackendReady(force = false) {
+    if (warmupReady && !force) return true;
+    if (warmupPromise && !force) return warmupPromise;
+
+    warmupPromise = (async () => {
+        for (let attempt = 1; attempt <= 3; attempt++) {
+            try {
+                const response = await fetch(`/api/system/warmup?timeoutMs=25000`, {
+                    method: "GET",
+                    cache: "no-store"
+                });
+
+                if (response.ok) {
+                    warmupReady = true;
+                    return true;
+                }
+            } catch (_) {
+                // silencioso a propósito
+            }
+
+            await sleep(1200 * attempt);
+        }
+
+        return false;
+    })();
+
+    try {
+        return await warmupPromise;
+    } finally {
+        if (!warmupReady) {
+            warmupPromise = null;
+        }
+    }
+}
 const passwordInput = document.getElementById("password");
 const togglePasswordBtn = document.getElementById("togglePassword");
 const eyeIcon = togglePasswordBtn?.querySelector(".eye-icon");
@@ -69,14 +110,23 @@ if (passwordInput && togglePasswordBtn) {
         }
     });
 }
+if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", () => {
+        ensureBackendReady().catch(() => {
+            // silencioso a propósito
+        });
+    });
+} else {
+    ensureBackendReady().catch(() => {
+        // silencioso a propósito
+    });
+}
 
 document.getElementById("loginForm").addEventListener("submit", async function (e) {
     e.preventDefault();
 
     const email = document.getElementById("email").value;
     const password = document.getElementById("password").value;
-    const mensajeError = document.getElementById("mensajeError");
-
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
     if (!email || !password) {
@@ -96,20 +146,39 @@ document.getElementById("loginForm").addEventListener("submit", async function (
         password: password
     };
 
-    try {
-        const response = await fetch("/api/Auth/login", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify(loginData)
-        });
+try {
+    const ready = await ensureBackendReady();
 
-        if (!response.ok) {
-            throw new Error("Login failed: " + response.status);
-        }
+    if (!ready) {
+        mostrarError("La demo se está preparando. Intenta nuevamente en unos segundos.");
+        return;
+    }
 
-        const data = await response.json();
+    const response = await fetch("/api/Auth/login", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify(loginData)
+    });
+
+    if (response.status === 401) {
+        mostrarError("Correo o contraseña inválidos.");
+        return;
+    }
+
+    if (response.status === 429) {
+        const body = await response.json().catch(() => null);
+        mostrarError(body?.message || "Demasiados intentos. Intenta nuevamente en unos segundos.");
+        return;
+    }
+
+    if (!response.ok) {
+        mostrarError("La demo se está preparando. Intenta nuevamente en unos segundos.");
+        return;
+    }
+
+    const data = await response.json();
         if (!data.token) {
             mostrarError("No fue posible iniciar sesión.");
             return;
@@ -153,12 +222,10 @@ document.getElementById("loginForm").addEventListener("submit", async function (
         window.location.replace("dashboard.html" + hash);
 
 
-    } catch (error) {
-        console.error("Login error:", error);
-        mostrarError("Correo o contraseña inválidos.");
-
-
-    }
+} catch (error) {
+    console.error("Login error:", error);
+    mostrarError("La demo se está preparando. Intenta nuevamente en unos segundos.");
+}
 });
 // Ocultar mensaje de error al escribir nuevamente
 document.getElementById("email").addEventListener("input", () => {

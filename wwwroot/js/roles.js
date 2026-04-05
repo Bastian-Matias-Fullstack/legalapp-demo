@@ -4,7 +4,40 @@
 let choicesUsuarios;
 let choicesRoles;
 const apiBase = "/api";
+function actualizarMetricasRoles() {
+    const selectUsuarios = document.getElementById("selectUsuarios");
+    const selectRoles = document.getElementById("selectRoles");
+    const listaRolesAsignados = document.getElementById("listaRolesAsignados");
 
+    let usuariosConPerfil = 0;
+    let asignaciones = 0;
+    let disponibles = 0;
+
+    if (selectUsuarios) {
+        usuariosConPerfil = Array.from(selectUsuarios.options)
+            .filter(option => option.value && option.value !== "")
+            .length;
+    }
+
+    if (listaRolesAsignados) {
+        const items = Array.from(listaRolesAsignados.querySelectorAll("li"));
+        asignaciones = items.filter(item =>
+            !item.textContent.toLowerCase().includes("sin roles asignados")
+        ).length;
+    }
+
+    if (selectRoles) {
+        disponibles = Array.from(selectRoles.options)
+            .filter(option => option.value && option.value !== "")
+            .length;
+    }
+
+    window.legalAppMetricas.roles.usuariosConPerfil = usuariosConPerfil;
+    window.legalAppMetricas.roles.asignaciones = asignaciones;
+    window.legalAppMetricas.roles.disponibles = disponibles;
+
+    window.recalcularMetricasUI?.();
+}
 async function cargarUsuariosEnRoles() {
   const response = await fetch(`/api/usuarios?ts=${Date.now()}`, {
     cache: "no-store",
@@ -44,7 +77,8 @@ async function cargarUsuariosEnRoles() {
     itemSelectText: "",
   });
     choicesUsuarios.setChoiceByValue("");
-  // re-aplicar clase visual
+    // re-aplicar clase visual
+    actualizarMetricasRoles();
 }
 window.refrescarUsuariosEnRoles = async function () {
   await cargarUsuariosEnRoles();
@@ -81,7 +115,8 @@ async function cargarRoles() {
         'label',
         true
     );
-      choicesRoles.setChoiceByValue("");
+    choicesRoles.setChoiceByValue("");
+    actualizarMetricasRoles();
 }
 async function cargarRolesAsignados(usuarioId) {
     const res = await fetch(`${apiBase}/roles/${usuarioId}`, {
@@ -97,6 +132,7 @@ async function cargarRolesAsignados(usuarioId) {
 
     if (roles.length === 0) {
         lista.innerHTML = `<li class="list-group-item bg-transparent text-white">Sin roles asignados</li>`;
+        actualizarMetricasRoles();
         return;
     }
 
@@ -110,17 +146,20 @@ async function cargarRolesAsignados(usuarioId) {
         </li>
     `;
     });
+    actualizarMetricasRoles();
 }
 
 //  MÓDULO DE GESTIÓN DE ROLES
 // Cargar roles asignados al cambiar usuario
 
-document.getElementById("selectUsuarios")?.addEventListener("change", (e) => {
+document.getElementById("selectUsuarios")?.addEventListener("change", async (e) => {
     const usuarioId = e.target.value;
     if (usuarioId) {
-        cargarRolesAsignados(usuarioId);
+        await cargarRolesAsignados(usuarioId);
+        actualizarMetricasRoles();
     } else {
         document.getElementById("listaRolesAsignados").innerHTML = "";
+        actualizarMetricasRoles();
     }
 });
 
@@ -179,7 +218,8 @@ document.getElementById("btnAsignarRol")?.addEventListener("click", async () => 
             timer: 2000
         });
 
-        cargarRolesAsignados(usuarioId);
+        await cargarRolesAsignados(usuarioId);
+        actualizarMetricasRoles();
 
     } catch (error) {
         Swal.fire({
@@ -249,7 +289,8 @@ document.getElementById("btnAsignarRol")?.addEventListener("click", async () => 
                     timer: 2000
                 });
 
-                cargarRolesAsignados(usuarioId);
+                await cargarRolesAsignados(usuarioId);
+                actualizarMetricasRoles();
 
             } catch (error) {
                 Swal.fire({

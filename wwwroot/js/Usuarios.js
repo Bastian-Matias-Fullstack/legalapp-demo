@@ -23,6 +23,44 @@ function clearUserFormErrors() {
     ["nombreUsuario", "emailUsuario", "password"].forEach(clearFieldError);
 }
 
+function actualizarMetricasUsuarios(usuarios) {
+    const lista = Array.isArray(usuarios) ? usuarios : [];
+
+    const total = lista.length;
+
+    const protegidos = lista.filter(usuario => {
+        const nombre = (usuario?.nombre || "").toLowerCase();
+        const email = (usuario?.email || "").toLowerCase();
+
+        return nombre === "admin"
+            || nombre === "soporte"
+            || nombre === "abogado"
+            || email === "admin@legal.cl"
+            || email === "soporte@legal.cl"
+            || email === "abogado@legal.cl";
+    }).length;
+
+    const perfilesSet = new Set();
+
+    lista.forEach(usuario => {
+        const roles = usuario?.roles;
+
+        if (Array.isArray(roles)) {
+            roles.forEach(r => {
+                const nombreRol = typeof r === "string" ? r : r?.nombre;
+                if (nombreRol) perfilesSet.add(String(nombreRol).trim());
+            });
+        } else if (typeof roles === "string" && roles.trim()) {
+            perfilesSet.add(roles.trim());
+        }
+    });
+
+    window.legalAppMetricas.usuarios.total = total;
+    window.legalAppMetricas.usuarios.protegidos = protegidos;
+    window.legalAppMetricas.usuarios.perfiles = perfilesSet.size;
+
+    window.recalcularMetricasUI?.();
+}
 // usuarios.js
 // Este módulo carga, crea, edita y elimina usuarios desde el backend usando JWT
 // Punto de entrada del módulo, se llama desde dashboard.html
@@ -73,6 +111,7 @@ async function cargarUsuarios() {
         const usuarios = JSON.parse(text);
         renderizarUsuarios(usuarios);
         renderizarCardsUsuarios(usuarios);
+        actualizarMetricasUsuarios(usuarios);
     } catch (error) {
         console.error("Error al cargar usuarios:", error);
     }

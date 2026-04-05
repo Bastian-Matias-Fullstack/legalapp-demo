@@ -1,39 +1,52 @@
 ﻿function configurarSidebarPorRoles(roles) {
     roles = Array.isArray(roles) ? roles : [];
+
     const isAdmin = roles.includes("Admin");
     const isAbogado = roles.includes("Abogado");
     const isSoporte = roles.includes("Soporte");
 
-    // Admin: no ocultes nada
+    // Admin ve todo
     if (isAdmin) return;
-    // Roles nav solo Admin
+
+    // Dashboard nav: solo Admin o Abogado
+    if (!isAbogado) {
+        document.getElementById("nav-dashboard")?.remove();
+    }
+
+    // Roles nav: solo Admin
     document.getElementById("nav-roles")?.remove();
+
     // Usuarios nav: Admin o Soporte
     if (!isSoporte) {
         document.getElementById("nav-usuarios")?.remove();
     }
+
     // Casos nav: Admin o Abogado
     if (!isAbogado) {
         document.getElementById("nav-casos")?.remove();
     }
 }
+
 function CanAccess(moduloId, roles) {
     roles = Array.isArray(roles) ? roles : [];
 
-    // Admin lo ve todo
-    if (roles.includes("Admin")) return true;
+    const isAdmin = roles.includes("Admin");
+    const isAbogado = roles.includes("Abogado");
+    const isSoporte = roles.includes("Soporte");
 
-    // Dashboard solo Admin
-    if (moduloId === "mod-dashboard") return roles.includes("Admin");
+    // Admin ve todo
+    if (isAdmin) return true;
 
-    // Accesos por módulo (unión OR)
-    const canCasos = roles.includes("Abogado");
-    const canUsuarios = roles.includes("Soporte");
+    // Dashboard: Admin o Abogado
+    if (moduloId === "mod-dashboard") return isAbogado;
 
-    if (moduloId === "mod-casos") return canCasos;
-    if (moduloId === "mod-usuarios") return canUsuarios;
+    // Casos: Admin o Abogado
+    if (moduloId === "mod-casos") return isAbogado;
 
-    // Roles solo Admin (ya cubierto arriba)
+    // Usuarios: Admin o Soporte
+    if (moduloId === "mod-usuarios") return isSoporte;
+
+    // Roles: solo Admin
     if (moduloId === "mod-roles") return false;
 
     // Por defecto, denegar
@@ -79,15 +92,15 @@ function tieneRolValido(roles) {
     return roles.includes("Admin") || roles.includes("Abogado") || roles.includes("Soporte");
 }
 
-function obtenerModuloDefaultPorRol(roles) {
-    roles = normalizarRoles(roles);
+    function obtenerModuloDefaultPorRol(roles) {
+        roles = normalizarRoles(roles);
 
-    if (roles.includes("Admin")) return "mod-dashboard";
-    if (roles.includes("Abogado")) return "mod-casos";
-    if (roles.includes("Soporte")) return "mod-usuarios";
+        if (roles.includes("Admin")) return "mod-dashboard";
+        if (roles.includes("Abogado")) return "mod-dashboard";
+        if (roles.includes("Soporte")) return "mod-usuarios";
 
-    return null;
-}
+        return null;
+    }
 
 function resolverModuloInicial(roles, moduloSolicitado) {
     roles = normalizarRoles(roles);
@@ -349,6 +362,8 @@ document.addEventListener("DOMContentLoaded", () => {
         renderSaludoUsuario(usuario);
     });
     cargarCasosDesdeBackend();
+    initPdfExport();
+
 // PAGINACIÓN: listener único 
 const paginacion = document.getElementById("paginacion");
 
@@ -406,6 +421,7 @@ paginacion?.addEventListener("click", (e) => {
         }
 
         const data = await response.json();
+        window.casosGlobal = data.items || [];
 
         // Validación mínima para evitar errores si backend falla
         if (!data.items || !data.resumen) {
@@ -421,8 +437,8 @@ paginacion?.addEventListener("click", (e) => {
         mostrarMensajeInformativo(data.items.length, data.totalRegistros);
         renderizarPaginacion(data.pagina, data.totalPaginas);
 
-
     }
+
     function renderizarTabla(lista) {
         const tbody = document.getElementById("casosBody");
         tbody.classList.remove("opacity-100");
@@ -570,10 +586,163 @@ paginacion?.addEventListener("click", (e) => {
         }
         paginacion.appendChild(crearItem("Siguiente", paginaActual + 1, paginaActual === totalPaginas));
     }
+    window.legalAppMetricas = {
+        casos: {
+            total: 0,
+            pendientes: 0,
+            enProceso: 0,
+            cerrados: 0
+        },
+        usuarios: {
+            total: 0,
+            protegidos: 0,
+            perfiles: 0
+        },
+        roles: {
+            usuariosConPerfil: 0,
+            asignaciones: 0,
+            disponibles: 0
+        }
+    };
+
+    window.recalcularMetricasUI = function () {
+        const metricas = window.legalAppMetricas;
+
+        // Dashboard principal
+        const totalCasosEl = document.getElementById("totalCasos");
+        const casosPendientesEl = document.getElementById("casosPendientes");
+        const casosResueltosEl = document.getElementById("casosResueltos");
+        const tasaCierreEl = document.getElementById("tasaCierre");
+
+        const overviewTotalEl = document.getElementById("overviewTotal");
+        const overviewPendientesEl = document.getElementById("overviewPendientes");
+        const overviewCerradosEl = document.getElementById("overviewCerrados");
+
+        const total = Number(metricas.casos.total ?? 0);
+        const pendientes = Number(metricas.casos.pendientes ?? 0);
+        const resueltos = Number(metricas.casos.cerrados ?? 0);
+        const enProceso = Number(metricas.casos.enProceso ?? 0);
+
+        const tasaCierre = total > 0
+            ? `${Math.round((resueltos / total) * 100)}%`
+            : "0%";
+
+        if (totalCasosEl) totalCasosEl.textContent = total;
+        if (casosPendientesEl) casosPendientesEl.textContent = pendientes;
+        if (casosResueltosEl) casosResueltosEl.textContent = resueltos;
+        if (tasaCierreEl) tasaCierreEl.textContent = tasaCierre;
+
+        if (overviewTotalEl) overviewTotalEl.textContent = total;
+        if (overviewPendientesEl) overviewPendientesEl.textContent = pendientes;
+        if (overviewCerradosEl) overviewCerradosEl.textContent = resueltos;
+
+        // Resumen módulo Casos
+        const casosResumenTotalEl = document.getElementById("casosResumenTotal");
+        const casosResumenPendientesEl = document.getElementById("casosResumenPendientes");
+        const casosResumenCerradosEl = document.getElementById("casosResumenCerrados");
+
+        if (casosResumenTotalEl) casosResumenTotalEl.textContent = total;
+        if (casosResumenPendientesEl) casosResumenPendientesEl.textContent = pendientes;
+        if (casosResumenCerradosEl) casosResumenCerradosEl.textContent = resueltos;
+
+        // Gráfico resumen principal
+        const chartPendientesValueEl = document.getElementById("chartPendientesValue");
+        const chartEnProcesoValueEl = document.getElementById("chartEnProcesoValue");
+        const chartCerradosValueEl = document.getElementById("chartCerradosValue");
+
+        const chartPendientesBarEl = document.getElementById("chartPendientesBar");
+        const chartEnProcesoBarEl = document.getElementById("chartEnProcesoBar");
+        const chartCerradosBarEl = document.getElementById("chartCerradosBar");
+
+        const totalGrafico = total > 0 ? total : 1;
+
+        const pendientesPct = (pendientes / totalGrafico) * 100;
+        const enProcesoPct = (enProceso / totalGrafico) * 100;
+        const cerradosPct = (resueltos / totalGrafico) * 100;
+        const insightEl = document.getElementById("insightText");
+        const insightIcon = document.getElementById("insightIcon");
+
+        if (insightIcon) {
+            if (cerradosPct < 40) {
+                insightIcon.textContent = "🔴";
+            } else if (cerradosPct < 70) {
+                insightIcon.textContent = "🟡";
+            } else {
+                insightIcon.textContent = "🟢";
+            }
+            const insightEl = document.getElementById("insightText");
+
+            if (insightEl) {
+                let mensaje = "";
+
+                if (cerradosPct < 40) {
+                    mensaje = `La tasa de resolución actual (${Math.round(cerradosPct)}%) se encuentra por debajo del umbral operativo esperado.
+                Se observa acumulación de casos en seguimiento, lo que podría impactar la eficiencia del sistema.
+                → Recomendación: priorizar la resolución de casos pendientes para optimizar el rendimiento operativo.`;
+                }
+                else if (cerradosPct >= 40 && cerradosPct < 70) {
+                    mensaje = `El sistema mantiene una operación estable con una tasa de resolución del ${Math.round(cerradosPct)}%.
+
+                → Existe margen de mejora en la gestión de casos en proceso para aumentar la eficiencia.`;
+                }
+                else {
+                    mensaje = `El sistema presenta un nivel óptimo de eficiencia con una tasa de resolución del ${Math.round(cerradosPct)}%.
+
+                → La operación se encuentra dentro de parámetros esperados.`;
+                }
+                insightEl.innerHTML = mensaje;
+            }
+        }
+
+        const formatPct = (value) => Math.round(value);
+
+        if (chartPendientesValueEl) {
+            chartPendientesValueEl.textContent = `${pendientes} (${formatPct(pendientesPct)}%)`;
+        }
+
+        if (chartEnProcesoValueEl) {
+            chartEnProcesoValueEl.textContent = `${enProceso} (${formatPct(enProcesoPct)}%)`;
+        }
+
+        if (chartCerradosValueEl) {
+            chartCerradosValueEl.textContent = `${resueltos} (${formatPct(cerradosPct)}%)`;
+        }
+
+        if (chartPendientesBarEl) chartPendientesBarEl.style.width = `${pendientesPct}%`;
+        if (chartEnProcesoBarEl) chartEnProcesoBarEl.style.width = `${enProcesoPct}%`;
+        if (chartCerradosBarEl) chartCerradosBarEl.style.width = `${cerradosPct}%`;
+
+      
+        // Resumen módulo Usuarios
+        const usuariosResumenTotalEl = document.getElementById("usuariosResumenTotal");
+        const usuariosResumenProtegidosEl = document.getElementById("usuariosResumenProtegidos");
+        const usuariosResumenPerfilesEl = document.getElementById("usuariosResumenPerfiles");
+
+        if (usuariosResumenTotalEl) usuariosResumenTotalEl.textContent = metricas.usuarios.total ?? 0;
+        if (usuariosResumenProtegidosEl) usuariosResumenProtegidosEl.textContent = metricas.usuarios.protegidos ?? 0;
+        if (usuariosResumenPerfilesEl) usuariosResumenPerfilesEl.textContent = metricas.usuarios.perfiles ?? 0;
+
+        // Resumen módulo Roles
+        const rolesResumenUsuariosEl = document.getElementById("rolesResumenUsuarios");
+        const rolesResumenAsignacionesEl = document.getElementById("rolesResumenAsignaciones");
+        const rolesResumenDisponiblesEl = document.getElementById("rolesResumenDisponibles");
+
+        if (rolesResumenUsuariosEl) rolesResumenUsuariosEl.textContent = metricas.roles.usuariosConPerfil ?? 0;
+        if (rolesResumenAsignacionesEl) rolesResumenAsignacionesEl.textContent = metricas.roles.asignaciones ?? 0;
+        if (rolesResumenDisponiblesEl) rolesResumenDisponiblesEl.textContent = metricas.roles.disponibles ?? 0;
+    };
     function actualizarResumen(resumen) {
-        document.getElementById("totalCasos").textContent = resumen.total;
-        document.getElementById("casosPendientes").textContent = resumen.pendientes;
-        document.getElementById("casosResueltos").textContent = resumen.resueltos;
+        const total = Number(resumen?.total ?? 0);
+        const pendientes = Number(resumen?.pendientes ?? 0);
+        const resueltos = Number(resumen?.resueltos ?? 0);
+        const enProceso = Math.max(total - pendientes - resueltos, 0);
+
+        window.legalAppMetricas.casos.total = total;
+        window.legalAppMetricas.casos.pendientes = pendientes;
+        window.legalAppMetricas.casos.enProceso = enProceso;
+        window.legalAppMetricas.casos.cerrados = resueltos;
+
+        window.recalcularMetricasUI?.();
     }
     /** Muestra totales y contadores en la parte superior del dashboard. */
     function mostrarMensajeInformativo(mostrados, total) {
@@ -1174,7 +1343,7 @@ if (submitBtn) {
 
 // CONTROLADOR DE MÓDULOS (NUEVO)
 const MODULOS = [
-    //'mod-dashboard',
+    'mod-dashboard',
     'mod-casos',
     'mod-usuarios',
     'mod-roles'
@@ -1182,11 +1351,24 @@ const MODULOS = [
 function mostrarModulo(id) {
     MODULOS.forEach(m => {
         const el = document.getElementById(m);
-        if (el) el.classList.add('d-none');
+        if (el) {
+            el.classList.add('d-none');
+            el.classList.remove('modulo-entrando');
+        }
     });
 
     const activo = document.getElementById(id);
-    if (activo) activo.classList.remove('d-none');
+    if (activo) {
+        activo.classList.remove('d-none');
+
+        // Reinicia animación de entrada del módulo
+        void activo.offsetWidth;
+        activo.classList.add('modulo-entrando');
+
+        setTimeout(() => {
+            activo.classList.remove('modulo-entrando');
+        }, 700);
+    }
 }
 // LOADER POR MÓDULO (PASO 1)
 function onModuloCargado(moduloId) {
@@ -1273,4 +1455,336 @@ window.addEventListener("hashchange", () => {
 
     if (!hashModulo) return;
     navigate(hashModulo);
+
 });
+
+
+function obtenerMetricasParaPDF() {
+    const metricas = window.legalAppMetricas || {};
+    const roles = obtenerRolesDesdeJWT();
+    const rol = obtenerRolEfectivo(roles);
+    const incluirGobernanza = rol === "Admin";
+
+    const total = Number(metricas.casos?.total ?? 0);
+    const pendientes = Number(metricas.casos?.pendientes ?? 0);
+    const cerrados = Number(metricas.casos?.cerrados ?? 0);
+    const enProceso = Number(metricas.casos?.enProceso ?? Math.max(total - pendientes - cerrados, 0));
+
+    const usuariosTotal = Number(metricas.usuarios?.total ?? 0);
+    const usuariosProtegidos = Number(metricas.usuarios?.protegidos ?? 0);
+    const perfilesDistintos = Number(metricas.usuarios?.perfiles ?? 0);
+
+    const usuariosConPerfil = Number(metricas.roles?.usuariosConPerfil ?? 0);
+    const rolesAsignados = Number(metricas.roles?.asignaciones ?? 0);
+    const rolesDisponibles = Number(metricas.roles?.disponibles ?? 0);
+
+    const pct = (valor) => total > 0 ? Math.round((valor / total) * 100) : 0;
+    const tasaCierre = pct(cerrados);
+    const pctPendientes = pct(pendientes);
+    const pctProceso = pct(enProceso);
+    const pctCerrados = pct(cerrados);
+
+    let estadoGeneral = "Sin operación registrada";
+    if (total > 0 && tasaCierre >= 65) estadoGeneral = "Operación saludable";
+    else if (total > 0 && tasaCierre >= 40) estadoGeneral = "Operación estable con foco";
+    else if (total > 0) estadoGeneral = "Mantener monitoreo periódico";
+
+    const fechaGeneracion = new Date().toLocaleString("es-CL", {
+        dateStyle: "long",
+        timeStyle: "short"
+    });
+
+    const resumen = total === 0
+        ? "Actualmente no existen casos registrados en el sistema, por lo que el tablero aún no refleja carga operativa activa. El entorno se encuentra disponible para poblamiento y validación funcional."
+        : `LegalApp registra ${total} casos en total. De ellos, ${pendientes} permanecen pendientes, ${enProceso} se encuentran en proceso y ${cerrados} ya fueron cerrados. La tasa de cierre actual alcanza ${tasaCierre}%, permitiendo evaluar el nivel de resolución operativa y la presión sobre la carga activa del entorno.`;
+
+    let hallazgos = [];
+
+    if (incluirGobernanza) {
+        hallazgos = [
+            total === 0
+                ? "Aún no existe carga de casos suficiente para evaluar desempeño operativo."
+                : `${pctPendientes}% del volumen total se mantiene pendiente, indicador clave para seguimiento y priorización operativa.`,
+            usuariosTotal > 0
+                ? `La base administrativa considera ${usuariosTotal} usuarios, con ${usuariosProtegidos} cuentas protegidas y ${perfilesDistintos} perfiles distintos registrados.`
+                : "No se observan métricas de usuarios suficientemente pobladas en este momento.",
+            rolesAsignados > 0
+                ? `Existen ${rolesAsignados} asignaciones de rol sobre ${rolesDisponibles} roles disponibles, con ${usuariosConPerfil} usuarios vinculados a perfiles.`
+                : "Las asignaciones de roles aún no muestran volumen suficiente para una lectura más profunda de gobernanza."
+        ];
+    } else {
+        hallazgos = [
+            total === 0
+                ? "Aún no existe carga de casos suficiente para evaluar desempeño operativo."
+                : `${pctPendientes}% del volumen total se mantiene pendiente, indicador clave para seguimiento y priorización operativa.`,
+            total > 0
+                ? `El porcentaje de cierre actual alcanza ${tasaCierre}%, permitiendo medir capacidad de resolución y estabilidad operativa.`
+                : "Todavía no existe suficiente actividad para medir una tasa de cierre representativa.",
+            enProceso > 0
+                ? `${enProceso} casos permanecen en proceso, lo que exige seguimiento para evitar acumulación operativa.`
+                : "La carga en proceso se mantiene contenida en este momento."
+        ];
+    }
+
+    let recomendacion = "Mantener monitoreo periódico del dashboard y continuar poblamiento controlado para fortalecer trazabilidad, evidencia visual y lectura ejecutiva del entorno.";
+    if (total > 0 && pctPendientes >= 45) {
+        recomendacion = "Priorizar la reducción del backlog pendiente mediante seguimiento activo, reasignación operativa y revisión de tiempos de resolución para mejorar la percepción de control del servicio.";
+    } else if (total > 0 && tasaCierre >= 65) {
+        recomendacion = "El comportamiento operativo es favorable. Conviene consolidar este desempeño con evidencia periódica, continuidad del dato y refuerzo visual de la propuesta de valor frente a clientes.";
+    }
+    let mensajeClave = "La operación presenta visibilidad suficiente para toma de decisión ejecutiva.";
+    let fortalezaClave = "La estructura de métricas permite monitorear carga, avance y capacidad de resolución.";
+    let prioridadClave = "Mantener seguimiento periódico para sostener trazabilidad y lectura de desempeño.";
+
+    if (total > 0 && tasaCierre < 40) {
+        mensajeClave = "La operación requiere foco inmediato sobre backlog y capacidad de cierre.";
+        fortalezaClave = "Existe visibilidad clara del volumen activo y del comportamiento por estado.";
+        prioridadClave = "Reducir pendientes y acelerar cierres para mejorar percepción de control del servicio.";
+    } else if (total > 0 && tasaCierre >= 65) {
+        mensajeClave = "La operación muestra un comportamiento estable y una resolución saludable.";
+        fortalezaClave = "La tasa de cierre confirma una dinámica de gestión favorable.";
+        prioridadClave = "Consolidar este desempeño con monitoreo preventivo y continuidad del dato.";
+    }
+    return {
+        total,
+        pendientes,
+        enProceso,
+        cerrados,
+        tasaCierre,
+        pctPendientes,
+        pctProceso,
+        pctCerrados,
+        usuariosTotal,
+        usuariosProtegidos,
+        perfilesDistintos,
+        usuariosConPerfil,
+        rolesAsignados,
+        rolesDisponibles,
+        fechaGeneracion,
+        estadoGeneral,
+        resumen,
+        hallazgos,
+        recomendacion,
+        mensajeClave,
+        fortalezaClave,
+        prioridadClave,
+        rol,
+        incluirGobernanza
+    };
+}
+
+    function crearNodoPDF(data) {
+        const template = document.getElementById("pdf-report-template");
+
+        if (!template) {
+            throw new Error("No existe #pdf-report-template");
+        }
+
+        const reportNode = template.content.firstElementChild.cloneNode(true);
+
+        const setText = (selector, value) => {
+            const el = reportNode.querySelector(selector);
+            if (el) el.textContent = value;
+        };
+
+        const setWidth = (selector, value) => {
+            const el = reportNode.querySelector(selector);
+            if (el) el.style.width = `${Math.max(0, Math.min(100, value))}%`;
+        };
+
+        setText('[data-pdf="fecha"]', data.fechaGeneracion);
+        setText('[data-pdf="estadoGeneral"]', data.estadoGeneral);
+        setText('[data-pdf="summary"]', data.resumen);
+
+        setText('[data-pdf="total"]', data.total);
+        setText('[data-pdf="pendientes"]', data.pendientes);
+        setText('[data-pdf="proceso"]', data.enProceso);
+        setText('[data-pdf="tasa"]', `${data.tasaCierre}%`);
+
+        setText('[data-pdf="pendientesTexto"]', `${data.pendientes} (${data.pctPendientes}%)`);
+        setText('[data-pdf="procesoTexto"]', `${data.enProceso} (${data.pctProceso}%)`);
+        setText('[data-pdf="cerradosTexto"]', `${data.cerrados} (${data.pctCerrados}%)`);
+
+        setWidth('[data-pdf="pendientesBar"]', data.pctPendientes);
+        setWidth('[data-pdf="procesoBar"]', data.pctProceso);
+        setWidth('[data-pdf="cerradosBar"]', data.pctCerrados);
+
+        setText('[data-pdf="usuariosTotal"]', data.usuariosTotal);
+        setText('[data-pdf="usuariosProtegidos"]', data.usuariosProtegidos);
+        setText('[data-pdf="perfilesDistintos"]', data.perfilesDistintos);
+        setText('[data-pdf="usuariosConPerfil"]', data.usuariosConPerfil);
+        setText('[data-pdf="rolesAsignados"]', data.rolesAsignados);
+        setText('[data-pdf="rolesDisponibles"]', data.rolesDisponibles);
+
+        setText('[data-pdf="hallazgo1"]', data.hallazgos[0] || "");
+        setText('[data-pdf="hallazgo2"]', data.hallazgos[1] || "");
+        setText('[data-pdf="hallazgo3"]', data.hallazgos[2] || "");
+        setText('[data-pdf="recomendacion"]', data.recomendacion);
+        setText('[data-pdf="mensajeClave"]', data.mensajeClave);
+        setText('[data-pdf="estadoGeneral2"]', data.estadoGeneral);
+        setText('[data-pdf="fortalezaClave"]', data.fortalezaClave);
+        setText('[data-pdf="prioridadClave"]', data.prioridadClave);
+
+        if (!data.incluirGobernanza) {
+            reportNode.querySelector("#pdf-section-gobernanza")?.remove();
+        }
+
+        reportNode.style.display = "block";
+        reportNode.style.width = "720px";
+        reportNode.style.minWidth = "720px";
+        reportNode.style.maxWidth = "720px";
+        reportNode.style.margin = "0";
+        reportNode.style.height = "auto";
+        reportNode.style.overflow = "visible";
+        reportNode.style.background = "#ffffff";
+        reportNode.style.position = "relative";
+        reportNode.style.left = "0";
+        reportNode.style.top = "0";
+        reportNode.style.zIndex = "1";
+        reportNode.style.pointerEvents = "none";
+        reportNode.style.boxSizing = "border-box";
+
+        reportNode.querySelectorAll("*").forEach(el => {
+            el.style.transition = "none";
+            el.style.animation = "none";
+            el.style.transform = "none";
+        });
+
+        return reportNode;
+    }
+function setEstadoBotonPDF(btn, exportando) {
+    if (!btn) return;
+
+    if (exportando) {
+        btn.disabled = true;
+        btn.dataset.exporting = "true";
+        btn.innerHTML = `<i class="bi bi-hourglass-split"></i> Generando PDF...`;
+        return;
+    }
+
+    btn.disabled = false;
+    btn.dataset.exporting = "false";
+    btn.innerHTML = `<i class="bi bi-file-earmark-pdf"></i> Exportar Reporte`;
+}
+
+async function exportarReportePDF() {
+    const btn = document.getElementById("btnExportPDF");
+    if (!btn || btn.dataset.exporting === "true") return;
+
+    const rol = obtenerRolEfectivo(obtenerRolesDesdeJWT());
+
+    if (rol !== "Admin" && rol !== "Abogado") {
+        throw new Error("No tienes permisos para exportar este reporte.");
+    }
+
+    let renderRoot = null;
+    let reportNode = null;
+
+    try {
+        console.log("DEBUG PDF typeof:", typeof window.html2pdf);
+
+        if (typeof window.html2pdf === "undefined") {
+            throw new Error("html2pdf no está cargado");
+        }
+
+        setEstadoBotonPDF(btn, true);
+
+        const data = obtenerMetricasParaPDF();
+        reportNode = crearNodoPDF(data);
+        renderRoot = document.createElement("div");
+        renderRoot.id = "pdf-render-root";
+        renderRoot.style.position = "fixed";
+        renderRoot.style.left = "0";
+        renderRoot.style.top = "0";
+        renderRoot.style.width = "720px";
+        renderRoot.style.padding = "0";
+        renderRoot.style.margin = "0";
+        renderRoot.style.opacity = "0.01";
+        renderRoot.style.pointerEvents = "none";
+        renderRoot.style.zIndex = "-1";
+        renderRoot.style.background = "#ffffff";
+        renderRoot.style.overflow = "visible";
+        renderRoot.style.height = "auto";
+        renderRoot.style.display = "block";
+        renderRoot.style.boxSizing = "border-box";
+
+        renderRoot.appendChild(reportNode);
+        document.body.appendChild(renderRoot);
+
+        await new Promise(resolve => setTimeout(resolve, 300));
+
+        console.log("PDF size:", reportNode.offsetWidth, reportNode.offsetHeight);
+
+        if (reportNode.offsetHeight === 0) {
+            throw new Error("El nodo PDF quedó con altura 0 antes de exportar.");
+        }
+
+        const opciones = {
+            margin: [8, 8, 8, 8],
+            filename: `legalapp_reporte_operativo_${new Date().toISOString().slice(0, 10)}.pdf`,
+            image: { type: "jpeg", quality: 0.98 },
+            html2canvas: {
+                scale: 2,
+                useCORS: true,
+                backgroundColor: "#ffffff",
+                scrollX: 0,
+                scrollY: 0,
+                width: reportNode.offsetWidth || 720,
+                height: reportNode.scrollHeight || reportNode.offsetHeight || 1123,
+                windowWidth: reportNode.offsetWidth || 720,
+                windowHeight: reportNode.scrollHeight || reportNode.offsetHeight || 1123
+            },
+            jsPDF: {
+                unit: "mm",
+                format: "a4",
+                orientation: "portrait"
+            },
+            pagebreak: {
+                mode: ["css", "legacy"]
+            }
+        };
+
+        await window.html2pdf()
+            .set(opciones)
+            .from(reportNode)
+            .save();
+
+    } catch (error) {
+        console.error("❌ Error exportando PDF:", error);
+
+        if (window.Swal?.fire) {
+            window.Swal.fire({
+                icon: "error",
+                title: "No fue posible generar el PDF",
+                text: error?.message || "Ocurrió un problema durante la exportación."
+            });
+        } else {
+            alert(error?.message || "Ocurrió un problema durante la exportación.");
+        }
+    } finally {
+        if (renderRoot && renderRoot.parentNode) {
+            renderRoot.parentNode.removeChild(renderRoot);
+        }
+
+        setEstadoBotonPDF(btn, false);
+    }
+}
+function initPdfExport() {
+    const btn = document.getElementById("btnExportPDF");
+
+    if (!btn) {
+        console.warn("⚠️ Botón PDF no encontrado");
+        return;
+    }
+
+    if (btn.dataset.pdfReady === "true") return;
+
+    btn.dataset.pdfReady = "true";
+    btn.addEventListener("click", exportarReportePDF);
+}
+
+      
+   
+
+
+

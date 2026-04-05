@@ -51,6 +51,11 @@
         </button>
 
         <ul class="sidebar-menu">
+            <li id="nav-dashboard" onclick="navigate('mod-dashboard')">
+                <i class="bi bi-speedometer2"></i>
+                <span>Resumen</span>
+            </li>
+
             <li id="nav-casos" onclick="navigate('mod-casos')">
                 <i class="bi bi-folder2-open"></i>
                 <span>Casos</span>
@@ -70,33 +75,160 @@
 
     <div id="sidebarOverlay" class="sidebar-overlay" onclick="closeSidebarMobile()"></div>
     <div class="container mt-4 mb-5">
+        <!-- resumen -->
+
         <section id="mod-dashboard" class="modulo">
-            <div class="summary-cards mb-4">
-                <div class="card">
-                    <i class="fas fa-briefcase icon"></i>
-                    <div>
-                        <p class="label" id="label-total">Casos totales</p>
-                        <p class="value" id="totalCasos">-</p>
+            <div class="dashboard-hero mb-4 section-spacing">
+                <div class="dashboard-header">
+                    <h2 class="dashboard-title">Resumen operativo del sistema</h2>
+                    <p class="dashboard-subtitle">
+                        Visión general de la carga activa, seguimiento y resolución de casos dentro del entorno de demostración.
+                    </p>
+                </div>
+                <div class="d-flex justify-content-end mb-3">
+                    <button id="btnExportPDF" class="btn btn-glass">
+                        <i class="bi bi-file-earmark-pdf"></i> Exportar Reporte
+                    </button>
+                </div>
+
+                <div class="summary-cards mb-4 section-spacing">
+                    <div class="card summary-card metric-card">
+                        <i class="fas fa-briefcase icon"></i>
+                        <div>
+                            <p class="label">Casos activos</p>
+                            <p class="value" id="totalCasos">-</p>
+                            <p class="card-note">Carga operativa actual</p>
+                        </div>
+                    </div>
+
+                    <div class="card summary-card metric-card">
+                        <i class="fas fa-hourglass-half icon"></i>
+                        <div>
+                            <p class="label">Pendientes de revisión</p>
+                            <p class="value" id="casosPendientes">-</p>
+                            <p class="card-note">Requieren seguimiento</p>
+                        </div>
+                    </div>
+
+                    <div class="card summary-card metric-card">
+                        <i class="fas fa-check-circle icon"></i>
+                        <div>
+                            <p class="label">Casos cerrados</p>
+                            <p class="value" id="casosResueltos">-</p>
+                            <p class="card-note">Resoluciones registradas</p>
+                        </div>
+                    </div>
+
+                    <div class="card summary-card metric-card">
+                        <i class="fas fa-chart-line icon"></i>
+                        <div>
+                            <p class="label">Tasa de cierre</p>
+                            <p class="value" id="tasaCierre">-</p>
+                            <p class="card-note">Rendimiento del período</p>
+                        </div>
                     </div>
                 </div>
-                <div class="card">
-                    <i class="fas fa-hourglass-half icon"></i>
-                    <div>
-                        <p class="label">Pendientes</p>
-                        <p class="value" id="casosPendientes">-</p>
+
+                <div class="dashboard-overview glass-container operativo-panel section-spacing">
+                    <div class="dashboard-overview-main">
+                        <h3>Resumen operativo</h3>
+                        <p>
+                            Este panel permite visualizar el estado general de la operación, facilitando seguimiento,
+                            control de carga activa y monitoreo de resolución dentro del sistema.
+                        </p>
                     </div>
-                </div>
-                <div class="card">
-                    <i class="fas fa-check-circle icon"></i>
-                    <div>
-                        <p class="label">Resueltos</p>
-                        <p class="value" id="casosResueltos">-</p>
+
+                    <div class="dashboard-overview-stats">
+                        <div class="overview-stat">
+                            <span class="overview-label">Total registrados</span>
+                            <strong id="overviewTotal">-</strong>
+                        </div>
+                        <div class="overview-stat">
+                            <span class="overview-label">En seguimiento</span>
+                            <strong id="overviewPendientes">-</strong>
+                        </div>
+                        <div class="overview-stat">
+                            <span class="overview-label">Casos Cerrados</span>
+                            <strong id="overviewCerrados">-</strong>
+                        </div>
+                    </div>
+                    <div class="dashboard-chart glass-container">
+                        <div class="dashboard-insight glass-container mt-3">
+                            <h4 class="insight-title">
+                                <span id="insightIcon">🧠</span> Estado operativo
+                            </h4>
+                            <p id="insightText" class="insight-text">
+                                Analizando datos...
+                            </p>
+                        </div>
+                        <div class="dashboard-chart-header">
+                            <div>
+                                <h3 class="dashboard-chart-title">Distribución operativa por estado</h3>
+                                <p class="dashboard-chart-subtitle">
+                                    Visualización dinámica del estado actual de los casos registrados en el sistema.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div class="chart-bars">
+                            <div class="chart-bar-item">
+                                <div class="chart-bar-top">
+                                    <span class="chart-bar-label">Pendientes</span>
+                                    <strong class="chart-bar-value" id="chartPendientesValue">0</strong>
+                                </div>
+                                <div class="chart-bar-track">
+                                    <div class="chart-bar-fill chart-bar-fill-pendientes" id="chartPendientesBar"></div>
+                                </div>
+                            </div>
+
+                            <div class="chart-bar-item">
+                                <div class="chart-bar-top">
+                                    <span class="chart-bar-label">En proceso</span>
+                                    <strong class="chart-bar-value" id="chartEnProcesoValue">0</strong>
+                                </div>
+                                <div class="chart-bar-track">
+                                    <div class="chart-bar-fill chart-bar-fill-proceso" id="chartEnProcesoBar"></div>
+                                </div>
+                            </div>
+
+                            <div class="chart-bar-item">
+                                <div class="chart-bar-top">
+                                    <span class="chart-bar-label">Cerrados</span>
+                                    <strong class="chart-bar-value" id="chartCerradosValue">0</strong>
+                                </div>
+                                <div class="chart-bar-track">
+                                    <div class="chart-bar-fill chart-bar-fill-cerrados" id="chartCerradosBar"></div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
         </section>
         <!-- 🔐 Gestión de Roles -->
         <section id="mod-roles" class="modulo d-none">
+            <div class="module-intro">
+                <h2 class="module-title">Control de Roles y Permisos</h2>
+                <p class="module-subtitle">
+                    Asignación de perfiles de acceso y segmentación funcional según responsabilidades operativas.
+                </p>
+            </div>
+            <div class="module-summary">
+                <div class="module-summary-grid">
+                    <div class="module-summary-card metric-card">
+                        <span class="module-summary-label">Usuarios disponibles</span>
+                        <strong class="module-summary-value" id="rolesResumenUsuarios">-</strong>
+                    </div>
+                    <div class="module-summary-card metric-card">
+                        <span class="module-summary-label">Roles asignados</span>
+                        <strong class="module-summary-value" id="rolesResumenAsignaciones">-</strong>
+                    </div>
+                    <div class="module-summary-card metric-card">
+                        <span class="module-summary-label">Roles disponibles</span>
+                        <strong class="module-summary-value" id="rolesResumenDisponibles">-</strong>
+                    </div>
+                </div>
+            </div>
             <div id="seccion-gestion-roles" class="glass-container p-4 mb-4 text-white d-none">
                 <h5 class="mb-3 fw-bold">👤 Gestión de Roles por Usuario</h5>
 
@@ -133,6 +265,29 @@
 
         <!-- Filtro y Tabla -->
         <section id="mod-casos" class="modulo d-none">
+            <div class="module-intro">
+                <h2 class="module-title">Gestión de Casos Jurídicos</h2>
+                <p class="module-subtitle">
+                    Seguimiento de casos, estados, clientes y acciones operativas dentro del entorno de demostración.
+                </p>
+            </div>
+            <div class="module-summary">
+                <div class="module-summary-grid">
+                    <div class="module-summary-card metric-card">
+                        <span class="module-summary-label">Total</span>
+                        <strong class="module-summary-value" id="casosResumenTotal">-</strong>
+                    </div>
+                    <div class="module-summary-card metric-card">
+                        <span class="module-summary-label">Pendientes</span>
+                        <strong class="module-summary-value" id="casosResumenPendientes">-</strong>
+                    </div>
+                    <div class="module-summary-card metric-card">
+                        <span class="module-summary-label">Cerrados</span>
+                        <strong class="module-summary-value" id="casosResumenCerrados">-</strong>
+                    </div>
+                </div>
+            </div>
+
             <div class="glass-container d-none" id="tablaCasosWrapper">
                 <div class="d-flex justify-content-end align-items-center mb-3">
                     <button id="btnNuevoCaso" class="btn btn-glass me-2">
@@ -147,7 +302,7 @@
                 </div>
 
                 <div class="table-responsive">
-                    <table class="table table-hover align-middle mb-0">
+                    <table class="table table-hover table-dark table-glass align-middle mb-0">
                         <thead class="table-dark">
                             <tr>
                                 <th>ID</th>
@@ -180,6 +335,32 @@
 
         <!-- 👤 Gestión de Usuarios -->
         <section id="mod-usuarios" class="modulo d-none">
+            <div class="module-intro">
+                <h2 class="module-title">Administración de Usuarios</h2>
+                <p class="module-subtitle">
+                    Gestión de cuentas internas, edición controlada y protección de usuarios base del sistema.
+                </p>
+            </div>
+            <div class="module-summary">
+                <div class="module-summary-grid">
+
+                    <div class="module-summary-card premium">
+                        <span class="module-summary-label">Usuarios activos</span>
+                        <strong class="module-summary-value" id="usuariosResumenTotal">-</strong>
+                    </div>
+
+                    <div class="module-summary-card premium">
+                        <span class="module-summary-label">Cuentas protegidas</span>
+                        <strong class="module-summary-value" id="usuariosResumenProtegidos">-</strong>
+                    </div>
+
+                    <div class="module-summary-card premium">
+                        <span class="module-summary-label">Perfiles distintos</span>
+                        <strong class="module-summary-value" id="usuariosResumenPerfiles">-</strong>
+                    </div>
+
+                </div>
+            </div>
             <div id="seccion-usuarios" class="glass-container d-none text-white">
                 <h5 class="mb-3 fw-bold">👤 Gestión de Usuarios</h5>
 
@@ -192,7 +373,7 @@
 
                 <!-- Tabla de usuarios -->
                 <div class="table-responsive">
-                    <table class="table table-hover align-middle mb-0">
+                    <table class="table table-hover table-dark table-glass align-middle mb-0">
                         <thead class="table-dark">
                             <tr>
                                 <th>ID</th>
@@ -382,9 +563,285 @@
             </div>
         </div>
     </div>
-    <script src="https://cdn.jsdelivr.net/npm/choices.js/public/assets/scripts/choices.min.js"></script>
+    <template id="pdf-report-template">
+        <section style="
+        width: 720px;
+        background: #ffffff;
+        color: #0f172a;
+        font-family: Arial, Helvetica, sans-serif;
+        padding: 34px 36px 30px 36px;
+        box-sizing: border-box;
+    ">
+            <!-- Header premium -->
+            <div style="
+            background: linear-gradient(135deg, #0f172a 0%, #172554 60%, #1e3a8a 100%);
+            color: #ffffff;
+            border-radius: 18px;
+            padding: 22px 24px;
+            margin-bottom: 22px;
+            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
+        ">
+                <table style="width:100%; border-collapse:collapse;">
+                    <tr>
+                        <td style="vertical-align:top;">
+                            <div style="font-size: 16px; letter-spacing: 1.6px; font-weight: 700; opacity:.92;">
+                                LEGALAPP
+                            </div>
+                            <div style="margin-top:8px; font-size: 26px; font-weight: 700; line-height:1.15;">
+                                Reporte ejecutivo operacional
+                            </div>
+                            <div style="margin-top:8px; font-size: 12px; opacity:.82; line-height:1.6;">
+                                Gestión legal · control operativo · monitoreo del entorno demo
+                            </div>
+                        </td>
+                        <td style="text-align:right; vertical-align:top; width: 240px;">
+                            <div style="font-size:11px; opacity:.78;">Fecha de generación</div>
+                            <div data-pdf="fecha" style="font-size:14px; font-weight:700; margin-top:4px; line-height:1.35;"></div>
+
+                            <div style="margin-top:18px; font-size:11px; opacity:.78;">Estado general</div>
+                            <div data-pdf="estadoGeneral" style="
+                            margin-top:6px;
+                            display:inline-block;
+                            background: rgba(255,255,255,0.12);
+                            border: 1px solid rgba(255,255,255,0.18);
+                            padding: 8px 12px;
+                            border-radius: 999px;
+                            font-size: 13px;
+                            font-weight: 700;
+                        "></div>
+                        </td>
+                    </tr>
+                </table>
+            </div>
+
+            <!-- Bloque lectura rápida -->
+            <div style="
+            margin-bottom: 18px;
+            padding: 16px 18px;
+            border-radius: 14px;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;">
+                <div style="font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:#64748b; margin-bottom:8px;">
+                    Lectura ejecutiva rápida
+                </div>
+                <div data-pdf="mensajeClave" style="
+                font-size: 18px;
+                line-height: 1.45;
+                font-weight: 700;
+                color:#0f172a;">
+
+                </div>
+            </div>
+
+            <!-- Resumen -->
+            <div style="margin-bottom: 24px;">
+                <div style="font-size: 11px; text-transform:uppercase; letter-spacing:.08em; color:#64748b; margin-bottom:8px;">
+                    Resumen ejecutivo
+                </div>
+                <div style="
+                background:#f8fafc;
+                border-left: 5px solid #0f172a;
+                border-radius: 12px;
+                padding: 18px 18px;
+                line-height: 1.75;
+                font-size: 14px;
+                color:#1e293b;
+            ">
+                    <span data-pdf="summary"></span>
+                </div>
+            </div>
+
+            <!-- KPI -->
+            <div style="margin-bottom: 24px;">
+                <div style="font-size: 11px; text-transform:uppercase; letter-spacing:.08em; color:#64748b; margin-bottom:10px;">
+                    Indicadores clave
+                </div>
+
+                <table style="width:100%; border-collapse:separate; border-spacing:12px;">
+                    <tr>
+                        <td style="background: linear-gradient(135deg, #0b132b 0%, #0f172a 60%, #172554 100%); color:#ffffff; border-radius:16px; padding:18px;">
+                            <div style="font-size:11px; opacity:.75;">TOTAL DE CASOS</div>
+                            <div data-pdf="total" style="font-size:40px; font-weight:700; margin-top:10px;"></div>
+                        </td>
+
+                        <td style="background: linear-gradient(135deg, #fde68a 0%, #facc15 100%); color:#111827; border-radius:16px; padding:18px;">
+                            <div style="font-size:11px;">PENDIENTES</div>
+                            <div data-pdf="pendientes" style="font-size:40px; font-weight:700; margin-top:10px;"></div>
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <td style="background: linear-gradient(135deg, #7dd3fc 0%, #38bdf8 100%); color:#082f49; border-radius:16px; padding:18px;">
+                            <div style="font-size:11px;">EN PROCESO</div>
+                            <div data-pdf="proceso" style="font-size:40px; font-weight:700; margin-top:10px;"></div>
+                        </td>
+
+                        <td style="background: linear-gradient(135deg, #4ade80 0%, #22c55e 100%); color:#052e16; border-radius:16px; padding:18px;">
+                            <div style="font-size:11px;">TASA DE CIERRE</div>
+                            <div data-pdf="tasa" style="font-size:40px; font-weight:700; margin-top:10px;"></div>
+                        </td>
+                    </tr>
+                </table>
+            </div>
+
+            <!-- Señales ejecutivas -->
+            <div style="margin-bottom: 24px;">
+                <div style="font-size: 11px; text-transform:uppercase; letter-spacing:.08em; color:#64748b; margin-bottom:10px;">
+                    Señales ejecutivas
+                </div>
+
+                <table style="width:100%; border-collapse:separate; border-spacing:12px;">
+                    <tr>
+                        <td style="
+                        width:33.33%;
+                        background:#fff7ed;
+                        border:1px solid #fed7aa;
+                        border-left: 5px solid #f97316;
+                        border-radius:14px;
+                        padding:16px;
+                        vertical-align:top;
+                    ">
+                            <div style="font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:#9a3412;">Estado</div>
+                            <div data-pdf="estadoGeneral2" style="margin-top:8px; font-size:16px; font-weight:700; color:#7c2d12;"></div>
+                        </td>
+
+                        <td style="
+                        width:33.33%;
+                        background:#eff6ff;
+                        border:1px solid #bfdbfe;
+                        border-left: 5px solid #2563eb;
+                        border-radius:14px;
+                        padding:16px;
+                        vertical-align:top;
+                    ">
+                            <div style="font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:#1d4ed8;">Fortaleza</div>
+                            <div data-pdf="fortalezaClave" style="margin-top:8px; font-size:14px; font-weight:700; line-height:1.55; color:#1e3a8a;"></div>
+                        </td>
+
+                        <td style="
+                        width:33.33%;
+                        background:#f0fdf4;
+                        border:1px solid #bbf7d0;
+                        border-left: 5px solid #16a34a;
+                        border-radius:14px;
+                        padding:16px;
+                        vertical-align:top;
+                    ">
+                            <div style="font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:#15803d;">Prioridad</div>
+                            <div data-pdf="prioridadClave" style="margin-top:8px; font-size:14px; font-weight:700; line-height:1.55; color:#166534;"></div>
+                        </td>
+                    </tr>
+                </table>
+            </div>
+
+            <!-- Distribución -->
+            <div style="margin-bottom: 24px;">
+                <div style="font-size: 11px; text-transform:uppercase; letter-spacing:.08em; color:#64748b; margin-bottom:10px;">
+                    Distribución operativa
+                </div>
+
+                <div style="margin-bottom: 16px;">
+                    <div style="display:flex; justify-content:space-between; font-size:13px; margin-bottom:7px;">
+                        <span style="color:#334155;">Pendientes</span>
+                        <strong data-pdf="pendientesTexto" style="color:#0f172a;"></strong>
+                    </div>
+                    <div style="height:14px; background:#e2e8f0; border-radius:999px; overflow:hidden;">
+                        <div data-pdf="pendientesBar" style="height:100%; width:0%; background:linear-gradient(90deg,#f59e0b,#facc15); border-radius:999px;"></div>
+                    </div>
+                </div>
+
+                <div style="margin-bottom: 16px;">
+                    <div style="display:flex; justify-content:space-between; font-size:13px; margin-bottom:7px;">
+                        <span style="color:#334155;">En proceso</span>
+                        <strong data-pdf="procesoTexto" style="color:#0f172a;"></strong>
+                    </div>
+                    <div style="height:14px; background:#e2e8f0; border-radius:999px; overflow:hidden;">
+                        <div data-pdf="procesoBar" style="height:100%; width:0%; background:linear-gradient(90deg,#0ea5e9,#38bdf8); border-radius:999px;"></div>
+                    </div>
+                </div>
+
+                <div>
+                    <div style="display:flex; justify-content:space-between; font-size:13px; margin-bottom:7px;">
+                        <span style="color:#334155;">Cerrados</span>
+                        <strong data-pdf="cerradosTexto" style="color:#0f172a;"></strong>
+                    </div>
+                    <div style="height:14px; background:#e2e8f0; border-radius:999px; overflow:hidden;">
+                        <div data-pdf="cerradosBar" style="height:100%; width:0%; background:linear-gradient(90deg,#16a34a,#22c55e); border-radius:999px;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Gobernanza -->
+            <div id="pdf-section-gobernanza" style="margin-bottom: 24px;">
+                <div style="font-size: 11px; text-transform:uppercase; letter-spacing:.08em; color:#64748b; margin-bottom:10px;">
+                    Gobernanza y administración
+                </div>
+
+                <table style="width:100%; border-collapse: collapse; font-size:13px; border-radius:14px; overflow:hidden;">
+                    <thead>
+                        <tr style="background:#e2e8f0; text-align:left;">
+                            <th style="padding:12px; border:1px solid #cbd5e1;">Indicador</th>
+                            <th style="padding:12px; border:1px solid #cbd5e1;">Valor</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td style="padding:12px; border:1px solid #cbd5e1;">Usuarios totales</td><td data-pdf="usuariosTotal" style="padding:12px; border:1px solid #cbd5e1;"></td></tr>
+                        <tr><td style="padding:12px; border:1px solid #cbd5e1;">Usuarios protegidos</td><td data-pdf="usuariosProtegidos" style="padding:12px; border:1px solid #cbd5e1;"></td></tr>
+                        <tr><td style="padding:12px; border:1px solid #cbd5e1;">Perfiles distintos</td><td data-pdf="perfilesDistintos" style="padding:12px; border:1px solid #cbd5e1;"></td></tr>
+                        <tr><td style="padding:12px; border:1px solid #cbd5e1;">Usuarios con perfil</td><td data-pdf="usuariosConPerfil" style="padding:12px; border:1px solid #cbd5e1;"></td></tr>
+                        <tr><td style="padding:12px; border:1px solid #cbd5e1;">Asignaciones de rol</td><td data-pdf="rolesAsignados" style="padding:12px; border:1px solid #cbd5e1;"></td></tr>
+                        <tr><td style="padding:12px; border:1px solid #cbd5e1;">Roles disponibles</td><td data-pdf="rolesDisponibles" style="padding:12px; border:1px solid #cbd5e1;"></td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Hallazgos -->
+            <div style="margin-bottom: 24px;">
+                <div style="font-size: 11px; text-transform:uppercase; letter-spacing:.08em; color:#64748b; margin-bottom:10px;">
+                    Hallazgos principales
+                </div>
+
+                <ul style="margin:0; padding-left:20px; color:#1e293b; font-size:14px; line-height:1.9;">
+                    <li data-pdf="hallazgo1"></li>
+                    <li data-pdf="hallazgo2"></li>
+                    <li data-pdf="hallazgo3"></li>
+                </ul>
+            </div>
+
+            <!-- Recomendación -->
+            <div style="
+            margin-top: 22px;
+            padding: 20px 20px;
+            border-radius: 16px;
+            background: linear-gradient(180deg, #eff6ff 0%, #e0f2fe 100%);
+            border: 1px solid #bfdbfe;
+            box-shadow: inset 0 1px 0 rgba(255,255,255,.7);
+        ">
+                <div style="font-size: 11px; text-transform:uppercase; letter-spacing:.08em; color:#2563eb; margin-bottom:8px;">
+                    Recomendación ejecutiva
+                </div>
+                <div data-pdf="recomendacion" style="font-size:16px; line-height:1.8; font-weight:700; color:#1e3a8a;"></div>
+            </div>
+
+            <!-- Footer -->
+            <div style="
+            margin-top: 26px;
+            padding-top: 14px;
+            border-top: 1px solid #cbd5e1;
+            font-size: 11px;
+            color:#64748b;
+            text-align:center;
+            line-height:1.7;
+        ">
+                Documento generado automáticamente desde el dashboard de LegalApp.<br>
+                Entorno demo orientado a presentación ejecutiva y validación comercial.
+            </div>
+        </section>
+    </template>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="https://cdn.jsdelivr.net/npm/choices.js/public/assets/scripts/choices.min.js"></script>
+    <script src="/js/libs/html2pdf.bundle.min.js"></script>
     <script src="/js/dashboard.js"></script>
     <script>
         const token = localStorage.getItem("jwt_token");
