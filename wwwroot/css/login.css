@@ -73,8 +73,16 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    margin-bottom: 1rem;
+    margin-bottom: 0.35rem;
     color: #fff;
+}
+.login-subtitle {
+    margin: 0 0 1.35rem;
+    text-align: center;
+    color: rgba(255, 255, 255, 0.82);
+    font-size: 0.95rem;
+    font-weight: 500;
+    letter-spacing: 0.01em;
 }
 
     .login-title img {
@@ -187,8 +195,8 @@ button.btn {
     width: 32px;
     height: 32px;
     margin-right: 12px;
-    filter: drop-shadow(0 0 5px rgba(0, 136, 255, 0.5));
-    animation: pulseLogo 2s infinite ease-in-out;
+    filter: drop-shadow(0 0 4px rgba(0, 136, 255, 0.32));
+    animation: pulseLogo 2.8s infinite ease-in-out;
 }
 
 @keyframes pulseLogo {
@@ -210,8 +218,8 @@ button.btn {
 .titulo-con-glow {
     font-weight: 700;
     font-size: 1.6rem;
-    text-shadow: 0 0 10px rgba(255, 255, 255, 0.6);
-    letter-spacing: 0.5px;
+    text-shadow: 0 0 8px rgba(255, 255, 255, 0.28);
+    letter-spacing: 0.3px;
 }
 @keyframes introBlur {
     0% {
