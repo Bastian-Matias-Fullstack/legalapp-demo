@@ -73,6 +73,45 @@ function initUsuariosModule() {
     cargarUsuarios();
 }
 window.initUsuariosModule = initUsuariosModule;
+// =========================================================
+// CAPA DEFENSIVA USUARIOS - ANTI CLIC / ANTI REQUEST PARALELA
+// Objetivo: no cambiar el flujo actual; solo evitar submits/deletes
+// duplicados cuando la API/BD esté lenta o haya clics rápidos.
+// =========================================================
+let guardandoUsuario = false;
+const accionesUsuarioEnCurso = new Set();
+
+function iniciarAccionUsuario(clave) {
+    if (accionesUsuarioEnCurso.has(clave)) return false;
+    accionesUsuarioEnCurso.add(clave);
+    return true;
+}
+
+function finalizarAccionUsuario(clave) {
+    accionesUsuarioEnCurso.delete(clave);
+}
+
+function setBotonUsuarioCargando(btn, cargando, htmlCargando = null) {
+    if (!btn) return null;
+
+    if (cargando) {
+        const htmlOriginal = btn.innerHTML;
+        btn.disabled = true;
+        btn.classList.add("disabled");
+        btn.setAttribute("aria-busy", "true");
+
+        if (htmlCargando) {
+            btn.innerHTML = htmlCargando;
+        }
+
+        return htmlOriginal;
+    }
+
+    btn.disabled = false;
+    btn.classList.remove("disabled");
+    btn.removeAttribute("aria-busy");
+    return null;
+}
 // 🧠 Configura los listeners para botones y formularios
 function configurarEventosUsuarios() {
     document.getElementById("btnNuevoUsuario").addEventListener("click", () => {
@@ -287,91 +326,101 @@ function abrirModalUsuario(usuario = null) {
     }
 
     inicializarTogglePasswordUsuario();
-    const modal = new bootstrap.Modal(document.getElementById("modalUsuario"));
+    const modalEl = document.getElementById("modalUsuario");
+    const modal = bootstrap.Modal.getOrCreateInstance(modalEl); 
     modal.show();
 }
 // 💾 Guarda o actualiza un usuario (POST o PUT)
 async function guardarUsuario() {
+    if (guardandoUsuario) return;
+    guardandoUsuario = true;
+
     const id = (document.getElementById("usuarioId").value ?? "").trim();
-    // 1) Leer + normalizar (trim)
     const nombre = (document.getElementById("nombreUsuario").value ?? "").trim();
     const email = (document.getElementById("emailUsuario").value ?? "").trim();
     const password = (document.getElementById("password").value ?? "").trim();
     const esNuevo = !id;
 
-    // 2) Validaciones (inline, sin SweetAlert)
-    clearUserFormErrors();
-
-    const nombreRegex = /^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/;
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-    if (!nombre) {
-        setFieldError("nombreUsuario", "El nombre es obligatorio.");
-        document.getElementById("nombreUsuario").focus();
-        return;
-    }
-    if (nombre.length < 3) {
-        setFieldError("nombreUsuario", "El nombre debe tener al menos 3 caracteres.");
-        document.getElementById("nombreUsuario").focus();
-        return;
-    }
-    if (!nombreRegex.test(nombre)) {
-        setFieldError("nombreUsuario", "El nombre solo puede contener letras y espacios.");
-        document.getElementById("nombreUsuario").focus();
-        return;
-    }
-
-    if (!email) {
-        setFieldError("emailUsuario", "El email es obligatorio.");
-        document.getElementById("emailUsuario").focus();
-        return;
-    }
-    if (!emailRegex.test(email)) {
-        setFieldError("emailUsuario", "Email inválido.");
-        document.getElementById("emailUsuario").focus();
-        return;
-    }
-
-    if (esNuevo) {
-        if (!password) {
-            setFieldError("password", "La contraseña es obligatoria.");
-            document.getElementById("password").focus();
-            return;
-        }
-        if (password.length < 6) {
-            setFieldError("password", "La contraseña debe tener al menos 6 caracteres.");
-            document.getElementById("password").focus();
-            return;
-        }
-    } else {
-        if (password && password.length < 6) {
-            setFieldError("password", "La contraseña debe tener al menos 6 caracteres.");
-            document.getElementById("password").focus();
-            return;
-        }
-    }
-
-    // ✅ Primero crea el objeto
-    const payload = { nombre, email };
-    // ✅ Luego agrega la contraseña solo si se escribió
-    if (password && password.trim() !== "") {
-        payload.password = password.trim();
-    }
-    const url = id ? `/api/usuarios/${id}` : "/api/usuarios";
-    const method = id ? "PUT" : "POST";
-
-    // 🔒 UX pro: deshabilitar botón Guardar y mostrar spinner
     const btnSubmit = document.querySelector('button[type="submit"][form="formUsuario"]');
-
-    if (!btnSubmit) {
-        console.warn("No se encontró el botón submit del formulario formUsuario.");
-        return;
-    }
-    btnSubmit.disabled = true;
-    const originalHtml = btnSubmit.innerHTML;
-    btnSubmit.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Guardando...';
+    const originalHtml = btnSubmit?.innerHTML;
 
     try {
+        // Validaciones inline
+        clearUserFormErrors();
+
+        const nombreRegex = /^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/;
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+        if (!nombre) {
+            setFieldError("nombreUsuario", "El nombre es obligatorio.");
+            document.getElementById("nombreUsuario").focus();
+            return;
+        }
+
+        if (nombre.length < 3) {
+            setFieldError("nombreUsuario", "El nombre debe tener al menos 3 caracteres.");
+            document.getElementById("nombreUsuario").focus();
+            return;
+        }
+
+        if (!nombreRegex.test(nombre)) {
+            setFieldError("nombreUsuario", "El nombre solo puede contener letras y espacios.");
+            document.getElementById("nombreUsuario").focus();
+            return;
+        }
+
+        if (!email) {
+            setFieldError("emailUsuario", "El email es obligatorio.");
+            document.getElementById("emailUsuario").focus();
+            return;
+        }
+
+        if (!emailRegex.test(email)) {
+            setFieldError("emailUsuario", "Email inválido.");
+            document.getElementById("emailUsuario").focus();
+            return;
+        }
+
+        if (esNuevo) {
+            if (!password) {
+                setFieldError("password", "La contraseña es obligatoria.");
+                document.getElementById("password").focus();
+                return;
+            }
+
+            if (password.length < 6) {
+                setFieldError("password", "La contraseña debe tener al menos 6 caracteres.");
+                document.getElementById("password").focus();
+                return;
+            }
+        } else {
+            if (password && password.length < 6) {
+                setFieldError("password", "La contraseña debe tener al menos 6 caracteres.");
+                document.getElementById("password").focus();
+                return;
+            }
+        }
+
+        if (!btnSubmit) {
+            console.warn("No se encontró el botón submit del formulario formUsuario.");
+            return;
+        }
+
+        setBotonUsuarioCargando(
+            btnSubmit,
+            true,
+            '<span class="spinner-border spinner-border-sm me-2"></span>Guardando...'
+        );
+
+        const payload = { nombre, email };
+
+        if (password && password.trim() !== "") {
+            payload.password = password.trim();
+        }
+
+        const url = id ? `/api/usuarios/${id}` : "/api/usuarios";
+        const method = id ? "PUT" : "POST";
+
         const res = await fetch(url, {
             method,
             headers: {
@@ -381,21 +430,44 @@ async function guardarUsuario() {
             body: JSON.stringify(payload)
         });
 
-        if (!res.ok) throw new Error("Error al guardar usuario");
+        if (!res.ok) {
+            let mensaje = "Error al guardar usuario";
+
+            try {
+                const json = await res.json();
+                mensaje = json.detail || json.title || mensaje;
+            } catch {
+                // Si no viene JSON, usamos mensaje por defecto.
+            }
+
+            if (res.status === 429) {
+                mensaje = "Demasiadas solicitudes. Espera unos segundos e intenta nuevamente.";
+            }
+
+            throw new Error(mensaje);
+        }
 
         Swal.fire("Éxito", id ? "Usuario actualizado" : "Usuario creado", "success");
-        bootstrap.Modal.getInstance(document.getElementById("modalUsuario")).hide();
-        await cargarUsuarios(); //mejor esperar
-        window.refrescarUsuariosEnRoles?.(); //avisa al módulo Roles si está listo
+
+        const modalEl = document.getElementById("modalUsuario");
+        bootstrap.Modal.getOrCreateInstance(modalEl).hide();
+
+        await cargarUsuarios();
+        window.refrescarUsuariosEnRoles?.();
+
     } catch (error) {
         console.error(error);
-        Swal.fire("Error", error.message, "error");
+        Swal.fire("Error", error.message || "No se pudo guardar el usuario.", "error");
+
     } finally {
-        {
-            // 🔓 Restaurar botón siempre (éxito o error)
-            btnSubmit.disabled = false;
-            btnSubmit.innerHTML = originalHtml;
+        if (btnSubmit) {
+            setBotonUsuarioCargando(btnSubmit, false);
+            if (originalHtml !== null && originalHtml !== undefined) {
+                btnSubmit.innerHTML = originalHtml;
+            }
         }
+
+        guardandoUsuario = false;
     }
 }
 // ❌ Elimina un usuario después de confirmar con SweetAlert2
@@ -409,31 +481,62 @@ async function eliminarUsuario(id, esDemoProtegido = false) {
         return;
     }
 
-    const confirm = await Swal.fire({
-        title: "¿Eliminar usuario?",
-        text: "Esta acción no se puede deshacer",
-        icon: "warning",
-        showCancelButton: true,
-        confirmButtonText: "Sí, eliminar",
-        cancelButtonText: "Cancelar"
-    });
+    if (!id) return;
 
-    if (!confirm.isConfirmed) return;
+    const claveAccion = `eliminar:${id}`;
+    if (!iniciarAccionUsuario(claveAccion)) return;
 
     try {
+        const confirm = await Swal.fire({
+            title: "¿Eliminar usuario?",
+            text: "Esta acción no se puede deshacer",
+            icon: "warning",
+            showCancelButton: true,
+            confirmButtonText: "Sí, eliminar",
+            cancelButtonText: "Cancelar"
+        });
+
+        if (!confirm.isConfirmed) return;
+
+        Swal.fire({
+            title: "Eliminando usuario...",
+            allowOutsideClick: false,
+            didOpen: () => Swal.showLoading()
+        });
+
         const res = await fetch(`/api/usuarios/${id}`, {
             method: "DELETE",
             headers: authHeader()
         });
 
-        if (!res.ok) throw new Error("Error al eliminar usuario");
+        if (!res.ok) {
+            let mensaje = "Error al eliminar usuario";
+
+            try {
+                const json = await res.json();
+                mensaje = json.detail || json.title || mensaje;
+            } catch {
+                // Si no viene JSON, usamos mensaje por defecto.
+            }
+
+            if (res.status === 429) {
+                mensaje = "Demasiadas solicitudes. Espera unos segundos e intenta nuevamente.";
+            }
+
+            throw new Error(mensaje);
+        }
 
         Swal.fire("Eliminado", "El usuario fue eliminado", "success");
+
         await cargarUsuarios();
         window.refrescarUsuariosEnRoles?.();
+
     } catch (error) {
         console.error(error);
-        Swal.fire("Error", error.message, "error");
+        Swal.fire("Error", error.message || "No se pudo eliminar el usuario.", "error");
+
+    } finally {
+        finalizarAccionUsuario(claveAccion);
     }
 }
 // 🔐 Adjunta el JWT al header Authorization

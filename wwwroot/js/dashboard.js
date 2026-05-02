@@ -310,6 +310,59 @@ document.addEventListener("DOMContentLoaded", () => {
     navigate(decision.target);
 
     const apiUrl = "api/Casos";
+    
+// =========================================================
+// CAPA DEFENSIVA CASOS - ANTI CLIC / ANTI REQUEST PARALELA
+// Objetivo: no cambiar flujos; solo evitar cargas duplicadas
+// cuando Render/Azure SQL estén lentos o el usuario haga clics rápidos.
+// =========================================================
+let cargarCasosController = null;
+let cargarCasosSecuencia = 0;
+let detalleCasoCargando = false;
+let detalleCasoIdCargando = null;
+let abriendoNuevoCaso = false;
+let guardandoCaso = false;
+
+const accionesCasoEnCurso = new Set();
+
+function iniciarAccionCaso(clave) {
+    if (accionesCasoEnCurso.has(clave)) return false;
+    accionesCasoEnCurso.add(clave);
+    return true;
+}
+
+function finalizarAccionCaso(clave) {
+    accionesCasoEnCurso.delete(clave);
+}
+
+function limpiarBackdropsHuerfanos() {
+    const hayModalAbierto = document.querySelector(".modal.show");
+    if (hayModalAbierto) return;
+
+    document.querySelectorAll(".modal-backdrop").forEach(backdrop => backdrop.remove());
+    document.body.classList.remove("modal-open");
+    document.body.style.removeProperty("overflow");
+    document.body.style.removeProperty("padding-right");
+}
+
+function setBotonCargando(btn, cargando, htmlCargando = null) {
+    if (!btn) return null;
+
+    if (cargando) {
+        const htmlOriginal = btn.innerHTML;
+        btn.disabled = true;
+        btn.classList.add("disabled");
+        btn.setAttribute("aria-busy", "true");
+        if (htmlCargando) btn.innerHTML = htmlCargando;
+        return htmlOriginal;
+    }
+
+    btn.disabled = false;
+    btn.classList.remove("disabled");
+    btn.removeAttribute("aria-busy");
+    return null;
+}
+
     /* Define la URL base para la API de casos.*/
     /*Recupera el token JWT desde localStorage (para autorizar las peticiones).*/
     let usuario = JSON.parse(localStorage.getItem("usuario_actual"));
@@ -400,15 +453,28 @@ paginacion?.addEventListener("click", (e) => {
         return "?" + params.toString();
     }
     /*Transforma tu objeto filtros en un query string para el fetch.*/
-    async function cargarCasosDesdeBackend() {
+async function cargarCasosDesdeBackend() {
+    const secuenciaActual = ++cargarCasosSecuencia;
+
+    if (cargarCasosController) {
+        cargarCasosController.abort();
+    }
+
+    const controller = new AbortController();
+    cargarCasosController = controller;
+
+    try {
         const query = construirQueryString(filtros);
 
         const response = await fetch(`${apiUrl}${query}`, {
+            cache: "no-store",
+            signal: controller.signal,
             headers: {
                 'Authorization': `Bearer ${token}`
             }
         });
 
+        if (secuenciaActual !== cargarCasosSecuencia) return;
 
         if (!response.ok) {
             if (response.status === 401) {
@@ -416,11 +482,23 @@ paginacion?.addEventListener("click", (e) => {
                 return;
             }
 
+            if (response.status === 429) {
+                console.warn("Demasiadas solicitudes al cargar casos.");
+                document.getElementById("contadorResultados").textContent =
+                    "Demasiadas solicitudes. Espera unos segundos e intenta nuevamente.";
+                return;
+            }
+
             console.error("Error al obtener los casos:", response.status);
+            document.getElementById("contadorResultados").textContent =
+                "No se pudieron cargar los casos. Intenta nuevamente.";
             return;
         }
 
         const data = await response.json();
+
+        if (secuenciaActual !== cargarCasosSecuencia) return;
+
         window.casosGlobal = data.items || [];
 
         // Validación mínima para evitar errores si backend falla
@@ -437,7 +515,19 @@ paginacion?.addEventListener("click", (e) => {
         mostrarMensajeInformativo(data.items.length, data.totalRegistros);
         renderizarPaginacion(data.pagina, data.totalPaginas);
 
+    } catch (error) {
+        if (error?.name === "AbortError") return;
+
+        console.error("Error al cargar casos:", error);
+        document.getElementById("contadorResultados").textContent =
+            "No se pudo conectar con el servidor. Si la demo estaba en reposo, espera unos segundos e intenta nuevamente.";
+
+    } finally {
+        if (secuenciaActual === cargarCasosSecuencia && cargarCasosController === controller) {
+            cargarCasosController = null;
+        }
     }
+}
 
     function renderizarTabla(lista) {
         const tbody = document.getElementById("casosBody");
@@ -466,10 +556,10 @@ paginacion?.addEventListener("click", (e) => {
                    <button class="btn btn-sm btn-outline-light me-1 btn-ver" data-id="${caso.id}" title="Ver">
                    <i class="bi bi-eye-fill"></i>
                     </button>
-                    ${puedeEditar ? `
-                      <button class="btn btn-sm btn-outline-warning" title="Editar">
-                         <i class="bi bi-pencil-fill"></i>
-                      </button>` : ""}
+                      ${puedeEditar ? `
+              <button class="btn btn-sm btn-outline-warning btn-editar-caso" data-id="${caso.id}" data-estado="${caso.estado}" title="Editar">
+                 <i class="bi bi-pencil-fill"></i>
+              </button>` : ""}
 
                                   ${puedeEliminar ? `
                    <button class="btn btn-sm btn-outline-danger btn-eliminar" data-id="${caso.id}" title="Eliminar">
@@ -662,36 +752,33 @@ paginacion?.addEventListener("click", (e) => {
         const insightEl = document.getElementById("insightText");
         const insightIcon = document.getElementById("insightIcon");
 
-        if (insightIcon) {
+        if (insightEl) {
+            const tasa = Math.round(cerradosPct);
+            const esMovil = window.matchMedia("(max-width: 575.98px)").matches;
+
+            let mensaje = "";
+
             if (cerradosPct < 40) {
-                insightIcon.textContent = "🔴";
-            } else if (cerradosPct < 70) {
-                insightIcon.textContent = "🟡";
-            } else {
-                insightIcon.textContent = "🟢";
+                mensaje = esMovil
+                    ? `<strong>Bajo umbral · Cierre ${tasa}%</strong><br><span>Priorizar resolución de pendientes.</span>`
+                    : `La tasa de resolución actual (${tasa}%) se encuentra por debajo del umbral operativo esperado.
+        Se observa acumulación de casos en seguimiento, lo que podría impactar la eficiencia del sistema.
+        → Recomendación: priorizar la resolución de casos pendientes para optimizar el rendimiento operativo.`;
             }
-            const insightEl = document.getElementById("insightText");
-
-            if (insightEl) {
-                let mensaje = "";
-
-                if (cerradosPct < 40) {
-                    mensaje = `La tasa de resolución actual (${Math.round(cerradosPct)}%) se encuentra por debajo del umbral operativo esperado.
-                Se observa acumulación de casos en seguimiento, lo que podría impactar la eficiencia del sistema.
-                → Recomendación: priorizar la resolución de casos pendientes para optimizar el rendimiento operativo.`;
-                }
-                else if (cerradosPct >= 40 && cerradosPct < 70) {
-                    mensaje = `El sistema mantiene una operación estable con una tasa de resolución del ${Math.round(cerradosPct)}%.
-
-                → Existe margen de mejora en la gestión de casos en proceso para aumentar la eficiencia.`;
-                }
-                else {
-                    mensaje = `El sistema presenta un nivel óptimo de eficiencia con una tasa de resolución del ${Math.round(cerradosPct)}%.
-
-                → La operación se encuentra dentro de parámetros esperados.`;
-                }
-                insightEl.innerHTML = mensaje;
+            else if (cerradosPct >= 40 && cerradosPct < 70) {
+                mensaje = esMovil
+                    ? `<strong>Operación estable · Cierre ${tasa}%</strong><br><span>Optimizar casos en proceso.</span>`
+                    : `El sistema mantiene una operación estable con una tasa de resolución del ${tasa}%.
+        → Existe margen de mejora en la gestión de casos en proceso para aumentar la eficiencia.`;
             }
+            else {
+                mensaje = esMovil
+                    ? `<strong>Operación óptima · Cierre ${tasa}%</strong><br><span>Dentro de parámetros esperados.</span>`
+                    : `El sistema presenta un nivel óptimo de eficiencia con una tasa de resolución del ${tasa}%.
+        → La operación se encuentra dentro de parámetros esperados.`;
+            }
+
+            insightEl.innerHTML = mensaje;
         }
 
         const formatPct = (value) => Math.round(value);
@@ -752,42 +839,95 @@ paginacion?.addEventListener("click", (e) => {
     }
 
     /** Mensaje inferior: “Mostrando X de Y casos”*/
-    function mostrarDetalleCaso(id) {
-        fetch(`${apiUrl}/${id}`, {
+async function mostrarDetalleCaso(id, btnOrigen = null) {
+    if (detalleCasoCargando) {
+        console.warn("Detalle de caso ya está cargando. Clic ignorado.", {
+            idActual: detalleCasoIdCargando,
+            idSolicitado: id
+        });
+        return;
+    }
+
+    detalleCasoCargando = true;
+    detalleCasoIdCargando = id;
+
+    const btn = btnOrigen;
+    const htmlOriginal = setBotonCargando(
+        btn,
+        true,
+        `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>`
+    );
+
+    try {
+        const res = await fetch(`${apiUrl}/${id}?ts=${Date.now()}`, {
+            cache: "no-store",
             headers: {
                 'Authorization': `Bearer ${token}`
             }
-        })
-            .then(res => {
-                if (!res.ok) throw new Error("Error al obtener detalle");
-                return res.json();
-            })
-            .then(data => {
-                document.getElementById("detalle-titulo").innerText = data.titulo;
-                document.getElementById("detalle-descripcion").innerText = data.descripcion;
-                document.getElementById("detalle-estado").innerText = data.estado;
-                document.getElementById("detalle-tipo").innerText = data.tipoCaso;
-                document.getElementById("detalle-cliente").innerText = data.nombreCliente;
-                document.getElementById("detalle-fecha").innerText = new Date(data.fechaCreacion).toLocaleDateString();
+        });
 
-                 const grupoMotivo = document.getElementById("grupo-motivo-cierre");
-                const motivoEl = document.getElementById("detalle-motivo-cierre");
-                if (data.estado.toLowerCase() === "cerrado" && data.motivoCierre) {
-                motivoEl.innerText = data.motivoCierre;
-                grupoMotivo.classList.remove("d-none");
-            } else {
-                grupoMotivo.classList.add("d-none");
+        if (!res.ok) {
+            if (res.status === 401) {
+                clearSessionAndRedirect("expired-session-401");
+                return;
             }
 
+            throw new Error(`Error al obtener detalle. HTTP ${res.status}`);
+        }
 
-                const modal = new bootstrap.Modal(document.getElementById('modalDetalle'));
-                modal.show();
-            })
-            .catch(error => {
-                console.error("Error al cargar detalle:", error);
-                alert("No se pudo cargar el detalle del caso.");
+        const data = await res.json();
+
+        document.getElementById("detalle-titulo").innerText = data.titulo ?? "—";
+        document.getElementById("detalle-descripcion").innerText = data.descripcion ?? "—";
+        document.getElementById("detalle-estado").innerText = data.estado ?? "—";
+        document.getElementById("detalle-tipo").innerText = data.tipoCaso ?? "—";
+        document.getElementById("detalle-cliente").innerText = data.nombreCliente ?? "—";
+        document.getElementById("detalle-fecha").innerText = data.fechaCreacion
+            ? new Date(data.fechaCreacion).toLocaleDateString()
+            : "—";
+
+        const grupoMotivo = document.getElementById("grupo-motivo-cierre");
+        const motivoEl = document.getElementById("detalle-motivo-cierre");
+
+        if ((data.estado ?? "").toLowerCase() === "cerrado" && data.motivoCierre) {
+            motivoEl.innerText = data.motivoCierre;
+            grupoMotivo.classList.remove("d-none");
+        } else {
+            motivoEl.innerText = "";
+            grupoMotivo.classList.add("d-none");
+        }
+
+        const modalEl = document.getElementById("modalDetalle");
+        if (!modalEl) throw new Error("No existe #modalDetalle en el DOM.");
+
+        const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+        modal.show();
+
+    } catch (error) {
+        console.error("Error al cargar detalle:", error);
+        limpiarBackdropsHuerfanos();
+
+        if (window.Swal) {
+            Swal.fire({
+                icon: "error",
+                title: "No se pudo cargar el detalle",
+                text: "La información del caso no respondió a tiempo. Intenta nuevamente.",
+                confirmButtonText: "Entendido"
             });
+        } else {
+            alert("No se pudo cargar el detalle del caso.");
+        }
+
+    } finally {
+        if (btn) {
+            setBotonCargando(btn, false);
+            if (htmlOriginal !== null) btn.innerHTML = htmlOriginal;
+        }
+
+        detalleCasoCargando = false;
+        detalleCasoIdCargando = null;
     }
+}
 
     /* Trae los datos de un caso por ID.
 Rellena un modal Bootstrap para mostrar info detallada */
@@ -915,26 +1055,49 @@ function validateCasoForm() {
     document.addEventListener("click", async (e) => {
         // Ver detalle
 
-        if (e.target.closest(".btn-ver")) {
-            const btn = e.target.closest(".btn-ver");
-            const id = btn.dataset.id;
-            mostrarDetalleCaso(id);
-        }
+if (e.target.closest(".btn-ver")) {
+    e.preventDefault();
+    e.stopPropagation();
 
-        // EDITAR
-    if (e.target.closest(".btn-outline-warning")) {
-        const btn = e.target.closest(".btn-outline-warning, .btn-editar-caso");
-        const row = btn.closest("tr");
-        const card = btn.closest(".caso-card");
+    const btn = e.target.closest(".btn-ver");
+    const id = btn.dataset.id;
 
-        const id = btn.dataset.id || row?.children[0]?.textContent;
-        const estado = (
-            btn.dataset.estado ||
-            card?.dataset.estado ||
-            row?.children[2]?.innerText ||
-            ""
-        ).trim().toLowerCase();
+    if (!id) return;
+    if (btn.disabled || btn.getAttribute("aria-busy") === "true") return;
 
+    mostrarDetalleCaso(id, btn);
+    return;
+}
+
+    // EDITAR
+if (e.target.closest(".btn-editar-caso, .btn-outline-warning")) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const btn = e.target.closest(".btn-editar-caso, .btn-outline-warning");
+    const row = btn.closest("tr");
+    const card = btn.closest(".caso-card");
+
+    const id = btn.dataset.id || row?.children[0]?.textContent?.trim();
+    const estado = (
+        btn.dataset.estado ||
+        card?.dataset.estado ||
+        row?.children[2]?.innerText ||
+        ""
+    ).trim().toLowerCase();
+
+    if (!id) return;
+
+    const claveAccion = `editar:${id}`;
+    if (!iniciarAccionCaso(claveAccion)) return;
+
+    const htmlOriginal = setBotonCargando(
+        btn,
+        true,
+        `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>`
+    );
+
+    try {
         if (estado === "cerrado") {
             Swal.fire({
                 icon: "info",
@@ -944,94 +1107,121 @@ function validateCasoForm() {
             return;
         }
 
-          try {
-    const res = await fetch(`${apiUrl}/${id}`, {
-        headers: { "Authorization": `Bearer ${token}` }
-    });
+        const res = await fetch(`${apiUrl}/${id}?ts=${Date.now()}`, {
+            cache: "no-store",
+            headers: {
+                "Authorization": `Bearer ${token}`
+            }
+        });
 
-    if (!res.ok) {
-        throw new Error("No se pudo obtener el caso");
+        if (!res.ok) {
+            if (res.status === 401) {
+                clearSessionAndRedirect("expired-session-401");
+                return;
+            }
+
+            if (res.status === 429) {
+                throw new Error("Demasiadas solicitudes. Espera unos segundos e intenta nuevamente.");
+            }
+
+            throw new Error("No se pudo obtener el caso");
+        }
+
+        const data = await res.json();
+
+        const form = document.getElementById("formGestionCaso");
+        clearInvalid(form);
+
+        const tituloInput = document.getElementById("form-titulo");
+        const tipoSelect = document.getElementById("form-tipo");
+        const clienteSelect = document.getElementById("form-cliente");
+        const descripcionInput = document.getElementById("form-descripcion");
+
+        const submitBtn = document.querySelector('button[form="formGestionCaso"][type="submit"]');
+        if (submitBtn) {
+            submitBtn.style.display = "";
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '<i class="bi bi-save me-1"></i> Guardar Cambios';
+        }
+
+        [tituloInput, tipoSelect, clienteSelect, descripcionInput].forEach(el => {
+            if (el) el.disabled = false;
+        });
+
+        const rol = obtenerRolEfectivo(obtenerRolesDesdeJWT());
+
+        if (rol === "Abogado") {
+            clienteSelect.disabled = true;
+
+            if (data.estado === "EnProceso") {
+                tipoSelect.disabled = true;
+                tituloInput.disabled = true;
+            }
+
+            if (data.estado === "Cerrado") {
+                tituloInput.disabled = true;
+                tipoSelect.disabled = true;
+                clienteSelect.disabled = true;
+                descripcionInput.disabled = true;
+
+                if (submitBtn) {
+                    submitBtn.style.display = "none";
+                }
+            }
+        }
+
+        document.getElementById("form-id").value = data.id;
+        document.getElementById("form-titulo").value = data.titulo ?? "";
+        document.getElementById("form-descripcion").value = data.descripcion ?? "";
+
+        await cargarClientes();
+
+        clienteSelect.value = data.clienteId;
+        document.getElementById("grupo-cliente").style.display = "block";
+
+        const estadoSpan = document.getElementById("form-estado");
+
+        const estadoVisual =
+            data.estado === "Pendiente"
+                ? "EnProceso"
+                : data.estado;
+
+        estadoSpan.textContent = estadoVisual;
+        estadoSpan.className = "badge";
+
+        if (estadoVisual === "Pendiente") {
+            estadoSpan.classList.add("estado-pendiente");
+        } else if (estadoVisual === "EnProceso") {
+            estadoSpan.classList.add("estado-enproceso");
+        } else if (estadoVisual === "Cerrado") {
+            estadoSpan.classList.add("estado-cerrado");
+        }
+
+        document.getElementById("form-tipo").value = data.tipoCaso;
+        document.getElementById("modalGestionCasoLabel").textContent = "✏️ Editar Caso";
+
+        const modalEl = document.getElementById("modalGestionCaso");
+        bootstrap.Modal.getOrCreateInstance(modalEl).show();
+
+    } catch (err) {
+        console.error("❌ Error al cargar caso:", err);
+
+        Swal.fire({
+            icon: "error",
+            title: "No se pudo cargar el caso",
+            text: err.message || "Intenta nuevamente en unos segundos."
+        });
+
+    } finally {
+        setBotonCargando(btn, false);
+        if (htmlOriginal !== null) btn.innerHTML = htmlOriginal;
+
+        finalizarAccionCaso(claveAccion);
     }
 
-    const data = await res.json();
-    // Inputs del formulario (OBLIGATORIO)
-const tituloInput = document.getElementById("form-titulo");
-const tipoSelect = document.getElementById("form-tipo");
-const clienteSelect = document.getElementById("form-cliente");
-const descripcionInput = document.getElementById("form-descripcion");
-
-// Reset previo (muy importante)
-[tituloInput, tipoSelect, clienteSelect, descripcionInput].forEach(el => {
-    el.disabled = false;
-});
-
-   const rol = obtenerRolEfectivo(obtenerRolesDesdeJWT());
-
-// Reset previo (importante)
-[tituloInput, tipoSelect, clienteSelect, descripcionInput].forEach(el => {
-    el.disabled = false;
-});
-
-//REGLAS SEGÚN ESTADO + ROL
-if (rol === "Abogado") {
-
-    // Cliente nunca editable por abogado
-    clienteSelect.disabled = true;
-
-    if (data.estado === "EnProceso") {
-        tipoSelect.disabled = true;
-        tituloInput.disabled = true; //NUEVO: título no editable en EnProceso
-    }
-
-    if (data.estado === "Cerrado") {
-        tituloInput.disabled = true;
-        tipoSelect.disabled = true;
-        clienteSelect.disabled = true;
-        descripcionInput.disabled = true;
-
-        // Ocultar guardar
-        document.querySelector("#formGestionCaso button[type='submit']")
-            .style.display = "none";
-    }
-}
-    document.getElementById("form-id").value = data.id;
-    document.getElementById("form-titulo").value = data.titulo;
-    document.getElementById("form-descripcion").value = data.descripcion;
-    //cargar clientes ANTES de asignar valor
-    await cargarClientes();
-    //asignar SOLO el ID
-    clienteSelect.value = data.clienteId;
-    //no editable
-    document.getElementById("grupo-cliente").style.display = "block";
-// ESTADO (solo informativo)
-const estadoSpan = document.getElementById("form-estado");
-// Si viene Pendiente, visualmente pasa a EnProceso
-const estadoVisual =
-    data.estado === "Pendiente"
-        ? "EnProceso"
-        : data.estado;
-
-estadoSpan.textContent = estadoVisual;
-estadoSpan.className = "badge";
-
-if (estadoVisual === "Pendiente") {
-    estadoSpan.classList.add("estado-pendiente");
-} else if (estadoVisual === "EnProceso") {
-    estadoSpan.classList.add("estado-enproceso");
-} else if (estadoVisual === "Cerrado") {
-    estadoSpan.classList.add("estado-cerrado");
+    return;
 }
 
-    // -------- TIPO --------
-    document.getElementById("form-tipo").value = data.tipoCaso;
-    document.getElementById("modalGestionCasoLabel").textContent = "✏️ Editar Caso";
-    new bootstrap.Modal(document.getElementById("modalGestionCaso")).show();
-
-} catch (err) {
-    console.error("❌ Error al cargar caso:", err);
-    Swal.fire("Error", "No se pudo cargar el caso", "error");
-}
-        }    
         // Eliminar con SweetAlert (esto va *fuera* del bloque de editar)
         if (e.target.closest(".btn-eliminar")) {
             const btn = e.target.closest(".btn-eliminar");
@@ -1119,114 +1309,209 @@ if (estadoVisual === "Pendiente") {
                 }
             });
         }
-        // Cerrar caso
-        if (e.target.closest(".btn-cerrar")) {
-            const btn = e.target.closest(".btn-cerrar");
-            const id = btn.dataset.id;
-            // Preguntar motivo de cierre
-            const { value: motivo } = await Swal.fire({
-                title: "Cerrar caso",
-                input: "textarea",
-                inputLabel: "Motivo del cierre (opcional)",
-                inputPlaceholder: "Escribe el motivo si corresponde...",
-                inputAttributes: {
-                    "aria-label": "Motivo de cierre"
-                },
-                showCancelButton: true,
-                confirmButtonText: "Cerrar caso",
-                cancelButtonText: "Cancelar"
+// CERRAR CASO
+if (e.target.closest(".btn-cerrar")) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const btn = e.target.closest(".btn-cerrar");
+    const id = btn.dataset.id;
+
+    const fila = btn.closest("tr");
+    const card = btn.closest(".caso-card");
+
+    const estado = (
+        btn.dataset.estado ||
+        card?.dataset.estado ||
+        fila?.children[2]?.innerText ||
+        ""
+    ).trim().toLowerCase();
+
+    if (!id) return;
+
+    const claveAccion = `cerrar:${id}`;
+    if (!iniciarAccionCaso(claveAccion)) return;
+
+    const htmlOriginal = setBotonCargando(
+        btn,
+        true,
+        `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>`
+    );
+
+    try {
+        if (estado === "cerrado") {
+            Swal.fire({
+                icon: "info",
+                title: "Caso ya cerrado",
+                text: "Este caso ya se encuentra cerrado.",
             });
-            if (motivo === undefined) return; // Usuario canceló
-            try {
-                Swal.fire({
-                    title: "Cerrando caso...",
-                    allowOutsideClick: false,
-                    didOpen: () => Swal.showLoading()
-                });
-
-                const res = await fetch(`${apiUrl}/${id}/cerrar`, {
-                    method: "PUT",
-                    headers: {
-                        "Content-Type": "application/json",
-                        "Authorization": `Bearer ${token}`
-                    },
-                    body: JSON.stringify({ motivoCierre: motivo })
-                });
-
-                if (!res.ok) {
-                    const errorJson = await res.json();
-                    throw new Error(errorJson.detail || "Error inesperado");
-                }
-
-                await cargarCasosDesdeBackend();
-
-                Swal.fire({
-                    toast: true,
-                    position: 'top-end',
-                    icon: 'success',
-                    title: 'Caso cerrado con éxito',
-                    showConfirmButton: false,
-                    timer: 2000,
-                    timerProgressBar: true
-                });
-
-            } catch (error) {
-                console.error("Error al cerrar caso:", error);
-                Swal.fire({
-                    icon: "error",
-                    title: "Error al cerrar",
-                    text: error.message || "No se pudo cerrar el caso."
-                });
-            }
+            return;
         }
+
+        const result = await Swal.fire({
+            title: "Cerrar caso",
+            input: "textarea",
+            inputLabel: "Motivo del cierre (opcional)",
+            inputPlaceholder: "Escribe el motivo si corresponde...",
+            inputAttributes: {
+                "aria-label": "Motivo de cierre"
+            },
+            showCancelButton: true,
+            confirmButtonText: "Cerrar caso",
+            cancelButtonText: "Cancelar"
+        });
+
+        if (!result.isConfirmed) return;
+
+        const motivo = result.value ?? "";
+
+        Swal.fire({
+            title: "Cerrando caso...",
+            allowOutsideClick: false,
+            didOpen: () => Swal.showLoading()
+        });
+
+        const res = await fetch(`${apiUrl}/${id}/cerrar`, {
+            method: "PUT",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${token}`
+            },
+            body: JSON.stringify({ motivoCierre: motivo })
+        });
+
+        if (!res.ok) {
+            if (res.status === 401) {
+                clearSessionAndRedirect("expired-session-401");
+                return;
+            }
+
+            let mensajeError = "Error inesperado";
+
+            try {
+                const errorJson = await res.json();
+                mensajeError = errorJson.detail || mensajeError;
+            } catch {
+                // Si no viene JSON, usamos mensaje genérico.
+            }
+
+            if (res.status === 429) {
+                throw new Error("Demasiadas solicitudes. Espera unos segundos e intenta nuevamente.");
+            }
+
+            throw new Error(mensajeError);
+        }
+
+        await cargarCasosDesdeBackend();
+
+        Swal.fire({
+            toast: true,
+            position: "top-end",
+            icon: "success",
+            title: "Caso cerrado con éxito",
+            showConfirmButton: false,
+            timer: 2000,
+            timerProgressBar: true
+        });
+
+    } catch (error) {
+        console.error("Error al cerrar caso:", error);
+
+        Swal.fire({
+            icon: "error",
+            title: "Error al cerrar",
+            text: error.message || "No se pudo cerrar el caso."
+        });
+
+    } finally {
+        setBotonCargando(btn, false);
+        if (htmlOriginal !== null) btn.innerHTML = htmlOriginal;
+
+        finalizarAccionCaso(claveAccion);
+    }
+
+    return;
+}
     });
       
-    document.getElementById("btnNuevoCaso")?.addEventListener("click",async () => {
+document.getElementById("btnNuevoCaso")?.addEventListener("click", async () => {
+    if (abriendoNuevoCaso) return;
 
-        // Limpiar el formulario antes de abrir
-        // Limpiar opciones previas por si viene de modo edición
+    abriendoNuevoCaso = true;
 
-        document.getElementById("formGestionCaso").reset();
-        //Reset visual de validaciones inline (paso 1)
-clearInvalid(document.getElementById("formGestionCaso"));
+    const btnNuevo = document.getElementById("btnNuevoCaso");
+    const htmlOriginal = btnNuevo?.innerHTML;
 
-//Asegurar que el botón Guardar siempre vuelva (fix submit oculto en edición Cerrado)
-const submitBtn = document.querySelector('button[form="formGestionCaso"][type="submit"]');
-if (submitBtn) {
-    submitBtn.style.display = ""; // vuelve a mostrarse si estaba oculto
-    submitBtn.disabled = false;   // por si quedó bloqueado
-    submitBtn.innerHTML = '<i class="bi bi-save me-1"></i> Guardar Cambios';
-}
+    try {
+        if (btnNuevo) {
+            btnNuevo.disabled = true;
+            btnNuevo.classList.add("disabled");
+            btnNuevo.setAttribute("aria-busy", "true");
+            btnNuevo.innerHTML = `
+                <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                Cargando...
+            `;
+        }
 
-// Asegurar que los campos vuelvan habilitados (nuevo caso = editable)
-["form-titulo", "form-descripcion", "form-tipo", "form-cliente"].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.disabled = false;
-});
+        const form = document.getElementById("formGestionCaso");
+        form.reset();
 
-        document.getElementById("form-id").value = ""; // dejar vacío para saber que es nuevo
-        // Limpiar campo cliente (solo visual)
-        document.getElementById("form-cliente").value = "";
-              
-   
-            const clienteSelect = document.getElementById("form-cliente");
-            clienteSelect.disabled = false;   
-            clienteSelect.innerHTML = `<option value="">-- Seleccione cliente --</option>`;
-            await cargarClientes();                   //  CLAVE, select, no readonly
-        
-        document.getElementById("grupo-cliente").style.display = "block"; // Mostrar campo
-            // ESTADO VISUAL POR DEFECTO (NUEVO CASO)
+        clearInvalid(form);
+
+        // Asegurar que el botón Guardar siempre vuelva.
+        const submitBtn = document.querySelector('button[form="formGestionCaso"][type="submit"]');
+        if (submitBtn) {
+            submitBtn.style.display = "";
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '<i class="bi bi-save me-1"></i> Guardar Cambios';
+        }
+
+        // Nuevo caso = todos los campos editables.
+        ["form-titulo", "form-descripcion", "form-tipo", "form-cliente"].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.disabled = false;
+        });
+
+        document.getElementById("form-id").value = "";
+
+        const clienteSelect = document.getElementById("form-cliente");
+        clienteSelect.disabled = false;
+
+        await cargarClientes();
+
+        document.getElementById("grupo-cliente").style.display = "block";
+
         const estadoSpan = document.getElementById("form-estado");
         estadoSpan.textContent = "Pendiente";
         estadoSpan.className = "badge estado-pendiente";
 
-
-        // Actualizar el título del modal
         document.getElementById("modalGestionCasoLabel").textContent = "📝 Nuevo Caso";
-        // Mostrar el modal
-        const modal = new bootstrap.Modal(document.getElementById("modalGestionCaso"));
+
+        const modalEl = document.getElementById("modalGestionCaso");
+        const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
         modal.show();
-    });
+
+    } catch (error) {
+        console.error("❌ Error al preparar nuevo caso:", error);
+
+        Swal.fire({
+            icon: "error",
+            title: "No se pudo preparar el formulario",
+            text: error.message || "No se pudieron cargar los datos necesarios. Intenta nuevamente.",
+            confirmButtonText: "Entendido"
+        });
+
+    } finally {
+        if (btnNuevo) {
+            btnNuevo.disabled = false;
+            btnNuevo.classList.remove("disabled");
+            btnNuevo.removeAttribute("aria-busy");
+            btnNuevo.innerHTML = htmlOriginal;
+        }
+
+        abriendoNuevoCaso = false;
+    }
+});
 
     document.getElementById("formGestionCaso")?.addEventListener("submit", async (e) => {
         e.preventDefault();
@@ -1434,18 +1719,39 @@ window.addEventListener("resize", () => {
 });
 
 async function cargarClientes() {
-    const response = await fetch("/api/Clientes", {
+    const select = document.getElementById("form-cliente");
+    if (!select) return;
+
+    // La función se vuelve autosuficiente:
+    // siempre deja el select limpio antes de cargar opciones nuevas.
+    select.innerHTML = `<option value="">-- Seleccione cliente --</option>`;
+
+    const response = await fetch(`/api/Clientes?ts=${Date.now()}`, {
+        cache: "no-store",
         headers: {
             "Authorization": `Bearer ${token}`
         }
     });
+
+    if (!response.ok) {
+        if (response.status === 401) {
+            clearSessionAndRedirect("expired-session-401");
+            return;
+        }
+
+        if (response.status === 429) {
+            throw new Error("Demasiadas solicitudes cargando clientes. Espera unos segundos.");
+        }
+
+        throw new Error("No se pudieron cargar los clientes.");
+    }
+
     const clientes = await response.json();
-    const select = document.getElementById("form-cliente");
 
     clientes.forEach(c => {
         const option = document.createElement("option");
-        option.value = c.id;          // Id de la BD
-        option.textContent = c.nombre; // Nombre visible
+        option.value = c.id;
+        option.textContent = c.nombre;
         select.appendChild(option);
     });
 }
@@ -1496,7 +1802,7 @@ function obtenerMetricasParaPDF() {
 
     const resumen = total === 0
         ? "Actualmente no existen casos registrados en el sistema, por lo que el tablero aún no refleja carga operativa activa. El entorno se encuentra disponible para poblamiento y validación funcional."
-        : `LegalApp registra ${total} casos en total. De ellos, ${pendientes} permanecen pendientes, ${enProceso} se encuentran en proceso y ${cerrados} ya fueron cerrados. La tasa de cierre actual alcanza ${tasaCierre}%, permitiendo evaluar el nivel de resolución operativa y la presión sobre la carga activa del entorno.`;
+        : `Control Lex registra ${total} casos en total. De ellos, ${pendientes} permanecen pendientes, ${enProceso} se encuentran en proceso y ${cerrados} ya fueron cerrados. La tasa de cierre actual alcanza ${tasaCierre}%, permitiendo evaluar el nivel de resolución operativa y la presión sobre la carga activa del entorno.`;
 
     let hallazgos = [];
 
@@ -1581,6 +1887,7 @@ function obtenerMetricasParaPDF() {
         }
 
         const reportNode = template.content.firstElementChild.cloneNode(true);
+        reportNode.id = "pdf-report-root";
 
         const setText = (selector, value) => {
             const el = reportNode.querySelector(selector);
@@ -1637,10 +1944,14 @@ function obtenerMetricasParaPDF() {
         reportNode.style.height = "auto";
         reportNode.style.overflow = "visible";
         reportNode.style.background = "#ffffff";
-        reportNode.style.position = "relative";
-        reportNode.style.left = "0";
-        reportNode.style.top = "0";
-        reportNode.style.zIndex = "1";
+        reportNode.style.position = "static";
+        reportNode.style.left = "auto";
+        reportNode.style.top = "auto";
+        reportNode.style.zIndex = "auto";
+        reportNode.style.transform = "none";
+        reportNode.style.filter = "none";
+        reportNode.style.opacity = "1";
+        reportNode.style.visibility = "visible";
         reportNode.style.pointerEvents = "none";
         reportNode.style.boxSizing = "border-box";
 
@@ -1652,6 +1963,7 @@ function obtenerMetricasParaPDF() {
 
         return reportNode;
     }
+
 function setEstadoBotonPDF(btn, exportando) {
     if (!btn) return;
 
@@ -1666,8 +1978,7 @@ function setEstadoBotonPDF(btn, exportando) {
     btn.dataset.exporting = "false";
     btn.innerHTML = `<i class="bi bi-file-earmark-pdf"></i> Exportar Reporte`;
 }
-
-async function exportarReportePDF() {
+function exportarReportePDF() {
     const btn = document.getElementById("btnExportPDF");
     if (!btn || btn.dataset.exporting === "true") return;
 
@@ -1677,77 +1988,425 @@ async function exportarReportePDF() {
         throw new Error("No tienes permisos para exportar este reporte.");
     }
 
-    let renderRoot = null;
-    let reportNode = null;
-
     try {
-        console.log("DEBUG PDF typeof:", typeof window.html2pdf);
+        const jsPDFCtor = window.jspdf?.jsPDF || window.jsPDF;
 
-        if (typeof window.html2pdf === "undefined") {
-            throw new Error("html2pdf no está cargado");
+        if (!jsPDFCtor) {
+            throw new Error("jsPDF no está cargado. Revisa que el script de jsPDF esté antes de dashboard.js.");
         }
 
         setEstadoBotonPDF(btn, true);
 
         const data = obtenerMetricasParaPDF();
-        reportNode = crearNodoPDF(data);
-        renderRoot = document.createElement("div");
-        renderRoot.id = "pdf-render-root";
-        renderRoot.style.position = "fixed";
-        renderRoot.style.left = "0";
-        renderRoot.style.top = "0";
-        renderRoot.style.width = "720px";
-        renderRoot.style.padding = "0";
-        renderRoot.style.margin = "0";
-        renderRoot.style.opacity = "0.01";
-        renderRoot.style.pointerEvents = "none";
-        renderRoot.style.zIndex = "-1";
-        renderRoot.style.background = "#ffffff";
-        renderRoot.style.overflow = "visible";
-        renderRoot.style.height = "auto";
-        renderRoot.style.display = "block";
-        renderRoot.style.boxSizing = "border-box";
 
-        renderRoot.appendChild(reportNode);
-        document.body.appendChild(renderRoot);
+        const doc = new jsPDFCtor({
+            orientation: "portrait",
+            unit: "mm",
+            format: "a4",
+            compress: true
+        });
 
-        await new Promise(resolve => setTimeout(resolve, 300));
+        const pageW = 210;
+        const pageH = 297;
+        const margin = 14;
+        const contentW = pageW - margin * 2;
 
-        console.log("PDF size:", reportNode.offsetWidth, reportNode.offsetHeight);
+        const colors = {
+            navy: [15, 23, 42],
+            blue: [30, 58, 138],
+            lightBlue: [239, 246, 255],
+            sky: [56, 189, 248],
+            yellow: [250, 204, 21],
+            green: [34, 197, 94],
+            orange: [249, 115, 22],
+            text: [15, 23, 42],
+            muted: [100, 116, 139],
+            border: [203, 213, 225],
+            soft: [248, 250, 252],
+            white: [255, 255, 255]
+        };
 
-        if (reportNode.offsetHeight === 0) {
-            throw new Error("El nodo PDF quedó con altura 0 antes de exportar.");
-        }
+        const setColor = (rgb, type = "text") => {
+            if (type === "fill") doc.setFillColor(rgb[0], rgb[1], rgb[2]);
+            else if (type === "draw") doc.setDrawColor(rgb[0], rgb[1], rgb[2]);
+            else doc.setTextColor(rgb[0], rgb[1], rgb[2]);
+        };
 
-        const opciones = {
-            margin: [8, 8, 8, 8],
-            filename: `legalapp_reporte_operativo_${new Date().toISOString().slice(0, 10)}.pdf`,
-            image: { type: "jpeg", quality: 0.98 },
-            html2canvas: {
-                scale: 2,
-                useCORS: true,
-                backgroundColor: "#ffffff",
-                scrollX: 0,
-                scrollY: 0,
-                width: reportNode.offsetWidth || 720,
-                height: reportNode.scrollHeight || reportNode.offsetHeight || 1123,
-                windowWidth: reportNode.offsetWidth || 720,
-                windowHeight: reportNode.scrollHeight || reportNode.offsetHeight || 1123
-            },
-            jsPDF: {
-                unit: "mm",
-                format: "a4",
-                orientation: "portrait"
-            },
-            pagebreak: {
-                mode: ["css", "legacy"]
+        const text = (value, x, y, options = {}) => {
+            const size = options.size || 10;
+            const style = options.style || "normal";
+            const color = options.color || colors.text;
+            const maxWidth = options.maxWidth;
+            const lineHeight = options.lineHeight || size * 0.42;
+
+            doc.setFont("helvetica", style);
+            doc.setFontSize(size);
+            setColor(color, "text");
+
+            const safeValue = String(value ?? "");
+
+            if (maxWidth) {
+                const lines = doc.splitTextToSize(safeValue, maxWidth);
+                doc.text(lines, x, y);
+                return y + Math.max(lines.length, 1) * lineHeight;
+            }
+
+            doc.text(safeValue, x, y, options.align ? { align: options.align } : undefined);
+            return y + lineHeight;
+        };
+
+            const sectionTitle = (label, y) => {
+                text(label.toUpperCase(), margin, y, {
+                    size: 8,
+                    style: "bold",
+                    color: colors.muted
+                });
+
+                setColor([226, 232, 240], "draw");
+                doc.line(margin, y + 2.8, pageW - margin, y + 2.8);
+
+                return y + 7;
+            };
+
+        const roundedFill = (x, y, w, h, radius, fillColor, drawColor = null) => {
+            setColor(fillColor, "fill");
+            if (drawColor) {
+                setColor(drawColor, "draw");
+                doc.roundedRect(x, y, w, h, radius, radius, "FD");
+            } else {
+                doc.roundedRect(x, y, w, h, radius, radius, "F");
             }
         };
 
-        await window.html2pdf()
-            .set(opciones)
-            .from(reportNode)
-            .save();
+        const drawHeader = () => {
+            roundedFill(margin, 14, contentW, 42, 4, colors.navy);
+
+            text("LEGALAPP", margin + 7, 25, {
+                size: 11,
+                style: "bold",
+                color: colors.white
+            });
+
+            text("Reporte ejecutivo", margin + 7, 34, {
+                size: 18,
+                style: "bold",
+                color: colors.white
+            });
+
+            text("operacional", margin + 7, 43, {
+                size: 18,
+                style: "bold",
+                color: colors.white
+            });
+
+            text("Gestión legal · control operativo · monitoreo del entorno demo", margin + 7, 51, {
+                size: 8.5,
+                color: [226, 232, 240]
+            });
+
+            text("Fecha de generación", pageW - margin - 7, 25, {                size: 8,
+                color: [203, 213, 225],
+                align: "right"
+            });
+
+            text(data.fechaGeneracion, pageW - margin - 7, 33, {
+                size: 10,
+                style: "bold",
+                color: colors.white,
+                align: "right"
+            });
+
+            text("Estado general", pageW - margin - 7, 41, {
+                size: 8,
+                color: [203, 213, 225],
+                align: "right"
+            });
+
+            roundedFill(pageW - margin - 64, 44, 57, 9.5, 4.5, colors.blue, [90, 110, 180]);
+            text(data.estadoGeneral, pageW - margin - 35.5, 50.5, {
+                size: 7.6,
+                style: "bold",
+                color: colors.white,
+                align: "center"
+            });
+
+            };
+
+            const drawKpiCard = (x, y, w, h, title, value, fillColor, valueColor = colors.text) => {
+                roundedFill(x, y, w, h, 4, fillColor);
+                text(title.toUpperCase(), x + 5, y + 9, {
+                    size: 8,
+                    color: fillColor === colors.navy ? [226, 232, 240] : colors.text
+                });
+                text(value, x + 5, y + 24, {
+                    size: 22,
+                    style: "bold",
+                    color: valueColor
+                });
+            };
+
+
+            const drawSignalCard = (x, y, w, title, body, accentColor, bgColor, textColor) => {
+                const h = 36;
+
+                roundedFill(x, y, w, h, 3.5, bgColor, [220, 230, 240]);
+                setColor(accentColor, "fill");
+                doc.roundedRect(x, y, 1.8, h, 1, 1, "F");
+
+                text(title.toUpperCase(), x + 5, y + 8, {
+                    size: 7.2,
+                    style: "bold",
+                    color: accentColor
+                });
+
+                text(body, x + 5, y + 16, {
+                    size: 8.4,
+                    style: "bold",
+                    color: textColor,
+                    maxWidth: w - 10,
+                    lineHeight: 4.1
+                });
+            };
+
+        const drawProgress = (label, valueText, pct, y, color) => {
+            text(label, margin, y, {
+                size: 10,
+                color: colors.text
+            });
+
+            text(valueText, pageW - margin, y, {
+                size: 10,
+                style: "bold",
+                color: colors.text,
+                align: "right"
+            });
+
+            setColor([226, 232, 240], "fill");
+            doc.roundedRect(margin, y + 4, contentW, 4, 2, 2, "F");
+
+            setColor(color, "fill");
+            doc.roundedRect(margin, y + 4, Math.max(4, contentW * Math.max(0, Math.min(100, pct)) / 100), 4, 2, 2, "F");
+
+            return y + 15;
+        };
+
+            const drawFooter = () => {
+                setColor(colors.border, "draw");
+                doc.line(margin, pageH - 22, pageW - margin, pageH - 22);
+
+                text("Documento generado automáticamente desde el dashboard de LegalApp.", pageW / 2, pageH - 15, {
+                    size: 7.8,
+                    color: colors.muted,
+                    align: "center"
+                });
+
+                text("Entorno demo orientado a presentación ejecutiva y validación comercial.", pageW / 2, pageH - 10, {
+                    size: 7.8,
+                    color: colors.muted,
+                    align: "center"
+                });
+            };
+
+        const drawPage1 = () => {
+            doc.setFillColor(255, 255, 255);
+            doc.rect(0, 0, pageW, pageH, "F");
+
+            drawHeader();
+
+            let y = 68;
+
+            y = sectionTitle("Lectura ejecutiva rápida", y);
+            roundedFill(margin, y, contentW, 26, 3.5, colors.soft, colors.border);
+            text(data.mensajeClave, margin + 5, y + 11, {
+                size: 12,
+                style: "bold",
+                color: colors.text,
+                maxWidth: contentW - 10,
+                lineHeight: 5.5
+            });
+
+            y += 40;
+
+            y = sectionTitle("Resumen ejecutivo", y);
+            roundedFill(margin, y, contentW, 30, 3.5, colors.soft);
+            setColor(colors.navy, "fill");
+            doc.roundedRect(margin, y, 1.7, 30, 0.8, 0.8, "F");
+
+            text(data.resumen, margin + 6, y + 9, {
+                size: 9.5,
+                color: [30, 41, 59],
+                maxWidth: contentW - 12,
+                lineHeight: 5
+            });
+
+            y += 44;
+
+            y = sectionTitle("Indicadores clave", y);
+
+            const gap = 6;
+            const cardW = (contentW - gap) / 2;
+            const cardH = 32;
+
+            drawKpiCard(margin, y, cardW, cardH, "Total de casos", data.total, colors.navy, colors.white);
+            drawKpiCard(margin + cardW + gap, y, cardW, cardH, "Pendientes", data.pendientes, colors.yellow, colors.text);
+
+            y += cardH + 6;
+
+            drawKpiCard(margin, y, cardW, cardH, "En proceso", data.enProceso, colors.sky, colors.text);
+            drawKpiCard(margin + cardW + gap, y, cardW, cardH, "Tasa de cierre", `${data.tasaCierre}%`, colors.green, colors.text);
+
+            y += cardH + 10;
+
+            y = sectionTitle("Señales ejecutivas", y);
+            const signalGap = 5;
+            const signalW = (contentW - signalGap * 2) / 3;
+
+            drawSignalCard(
+                margin,
+                y,
+                signalW,
+                "Estado",
+                data.estadoGeneral,
+                colors.orange,
+                [255, 247, 237],
+                [124, 45, 18]
+            );
+
+            drawSignalCard(
+                margin + signalW + signalGap,
+                y,
+                signalW,
+                "Fortaleza",
+                data.fortalezaClave,
+                [37, 99, 235],
+                [239, 246, 255],
+                [30, 58, 138]
+            );
+
+                drawSignalCard(
+                    margin + (signalW + signalGap) * 2,
+                    y,
+                    signalW,
+                    "Prioridad",
+                    data.prioridadClave,
+                    [22, 163, 74],
+                    [240, 253, 244],
+                    [22, 101, 52]
+                );
+
+                };
+
+        const drawGovernanceTable = (y) => {
+            const rowH = 10;
+            const col1 = contentW * 0.72;
+            const col2 = contentW - col1;
+
+            setColor([226, 232, 240], "fill");
+            setColor(colors.border, "draw");
+            doc.roundedRect(margin, y, contentW, rowH, 2.5, 2.5, "FD");
+
+            text("Indicador", margin + 3, y + 6.7, {
+                size: 8.5,
+                style: "bold",
+                color: colors.text
+            });
+
+            text("Valor", margin + col1 + 3, y + 6.7, {
+                size: 8.5,
+                style: "bold",
+                color: colors.text
+            });
+
+            y += rowH;
+
+            const rows = [
+                ["Usuarios totales", data.usuariosTotal],
+                ["Usuarios protegidos", data.usuariosProtegidos],
+                ["Perfiles distintos", data.perfilesDistintos],
+                ["Usuarios con perfil", data.usuariosConPerfil],
+                ["Asignaciones de rol", data.rolesAsignados],
+                ["Roles disponibles", data.rolesDisponibles]
+            ];
+
+            rows.forEach(([label, value]) => {
+                setColor(colors.white, "fill");
+                setColor(colors.border, "draw");
+                doc.rect(margin, y, col1, rowH, "FD");
+                doc.rect(margin + col1, y, col2, rowH, "FD");
+
+                text(label, margin + 3, y + 6.7, {
+                    size: 8.8,
+                    color: colors.text
+                });
+
+                text(value, margin + col1 + 3, y + 6.7, {
+                    size: 8.8,
+                    color: colors.text
+                });
+
+                y += rowH;
+            });
+
+            return y + 8;
+        };
+
+        const drawPage2 = () => {
+            doc.addPage();
+            doc.setFillColor(255, 255, 255);
+            doc.rect(0, 0, pageW, pageH, "F");
+
+            let y = 18;
+
+            y = sectionTitle("Distribución operativa", y);
+            y = drawProgress("Pendientes", `${data.pendientes} (${data.pctPendientes}%)`, data.pctPendientes, y, [245, 158, 11]);
+            y = drawProgress("En proceso", `${data.enProceso} (${data.pctProceso}%)`, data.pctProceso, y, [14, 165, 233]);
+            y = drawProgress("Cerrados", `${data.cerrados} (${data.pctCerrados}%)`, data.pctCerrados, y, [22, 163, 74]);
+
+            y += 2;
+
+            if (data.incluirGobernanza) {
+                y = sectionTitle("Gobernanza y administración", y);
+                y = drawGovernanceTable(y);
+            }
+
+            y = sectionTitle("Hallazgos principales", y);
+
+            const hallazgos = Array.isArray(data.hallazgos) ? data.hallazgos : [];
+            hallazgos.slice(0, 3).forEach((item) => {
+                text(`• ${item}`, margin + 3, y, {
+                    size: 10,
+                    color: colors.text,
+                    maxWidth: contentW - 6,
+                    lineHeight: 5.5
+                });
+                const lines = doc.splitTextToSize(`• ${item}`, contentW - 6);
+                y += Math.max(lines.length, 1) * 5.5 + 1;
+            });
+
+            y += 8;
+
+            roundedFill(margin, y, contentW, 34, 4, colors.lightBlue, [191, 219, 254]);
+            text("RECOMENDACIÓN EJECUTIVA", margin + 5, y + 8, {
+                size: 8.2,
+                style: "bold",
+                color: [37, 99, 235]
+            });
+
+            text(data.recomendacion, margin + 5, y + 17, {
+                size: 11.2,
+                style: "bold",
+                color: [30, 58, 138],
+                maxWidth: contentW - 10,
+                lineHeight: 5.7
+            });
+
+            drawFooter();
+        };
+
+        drawPage1();
+        drawPage2();
+
+        doc.save(`legalapp_reporte_operativo_${new Date().toISOString().slice(0, 10)}.pdf`);
 
     } catch (error) {
         console.error("❌ Error exportando PDF:", error);
@@ -1762,13 +2421,10 @@ async function exportarReportePDF() {
             alert(error?.message || "Ocurrió un problema durante la exportación.");
         }
     } finally {
-        if (renderRoot && renderRoot.parentNode) {
-            renderRoot.parentNode.removeChild(renderRoot);
-        }
-
         setEstadoBotonPDF(btn, false);
     }
 }
+
 function initPdfExport() {
     const btn = document.getElementById("btnExportPDF");
 
